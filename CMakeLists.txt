@@ -35,3 +35,8 @@ else()
     target_compile_options(${tgt} PRIVATE -O3 -DNDEBUG -Wall -Wextra -Wpedantic)
   endforeach()
 endif()
+
+include(CTest)
+if (BUILD_TESTING)
+  add_test(NAME smoke COMMAND tests)
+endif()
