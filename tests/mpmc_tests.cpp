@@ -25,7 +25,7 @@ TEST(MpmcRing, Capacity) {
   EXPECT_THROW(mpmc::MpmcRing<int> ring(18), std::invalid_argument); // not power-of-two
 }
 
-TEST(MpmcRing, DISABLED_BasicPushPop) {
+TEST(MpmcRing, BasicPushPop) {
   const auto capacity = 8;
   mpmc::MpmcRing<int> ring(capacity);
 
@@ -42,7 +42,7 @@ TEST(MpmcRing, DISABLED_BasicPushPop) {
   }
 }
 
-TEST(MpmcRing, DISABLED_FullEmptyBoundaries) {
+TEST(MpmcRing, FullEmptyBoundaries) {
   const auto capacity = 8;
   mpmc::MpmcRing<int> ring(capacity);
 
@@ -64,7 +64,7 @@ TEST(MpmcRing, DISABLED_FullEmptyBoundaries) {
   EXPECT_FALSE(ring.try_pop(v));
 }
 
-TEST(MpmcRing, DISABLED_WrapAroundFifo) {
+TEST(MpmcRing, WrapAroundFifo) {
   const auto capacity = 8;
   mpmc::MpmcRing<int> ring(capacity);
 
@@ -97,7 +97,7 @@ TEST(MpmcRing, DISABLED_WrapAroundFifo) {
   EXPECT_TRUE(ring.empty());
 }
 
-TEST(MpmcRing, DISABLED_MoveOnlyType) {
+TEST(MpmcRing, MoveOnlyType) {
   const auto capacity = 8;
   mpmc::MpmcRing<std::unique_ptr<int>> ring(capacity);
 
