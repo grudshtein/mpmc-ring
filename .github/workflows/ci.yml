@@ -2,6 +2,7 @@ name: ci
 on: [push, pull_request]
 
 jobs:
+  # Fast Windows build to prove VS/MSVC builds succeed
   windows-msvc:
     runs-on: windows-latest
     defaults:
@@ -10,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
   
+      # Single-config build to avoid VS multi-config folder maze
       - name: Configure (Ninja, Release)
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
@@ -18,3 +20,43 @@ jobs:
 
       - name: Run tests (ctest)
         run: ctest --test-dir build --output-on-failure
+
+  # Linux job with Address/Undefined sanitizers for UB coverage
+  ubuntu-asan-ubsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++ cmake
+
+      - name: Configure (ASan+UBSan, RelWithDebInfo)
+        env:
+          CFLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
+          CXXFLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
+          LDFLAGS: "-fsanitize=address,undefined"
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run tests (sanitizers)
+        run: ctest --test-dir build --output-on-failure
+
+  # ThreadSanitizer (race detector)
+  # ubuntu-tsan:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install toolchain
+  #       run: sudo apt-get update && sudo apt-get install -y ninja-build g++ cmake
+  #     - name: Configure (TSan)
+  #       env:
+  #         CFLAGS: "-fsanitize=thread -fno-omit-frame-pointer -O1 -g"
+  #         CXXFLAGS: "-fsanitize=thread -fno-omit-frame-pointer -O1 -g"
+  #         LDFLAGS: "-fsanitize=thread"
+  #       run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+  #     - name: Build
+  #       run: cmake --build build -j
+  #     - name: Run tests (TSan)
+  #       run: ctest --test-dir build --output-on-failure
