@@ -1,0 +1,14 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (VS 2022, x64)
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build (Release)
+        run: cmake --build build --config Release -- /m
+      - name: Run tests
+        run: build/Release/tests.exe
