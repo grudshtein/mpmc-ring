@@ -1,3 +1,5 @@
+![ci](https://github.com/grudshtein/mpmc-ring/actions/workflows/ci.yml/badge.svg)
+
 # MPMC Ring (bounded, lock-free) — C++20
 
 Bounded multi-producer/multi-consumer ring buffer in C++20.  
