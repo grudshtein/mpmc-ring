@@ -174,18 +174,17 @@ TEST(Ring, WrapAroundFifo) {
 
 /// Move-only payload.
 TEST(Ring, MoveOnlyType) {
-  constexpr int capacity_int = static_cast<int>(kCapacity);
   mpmc::MpmcRing<std::unique_ptr<int>> ring(kCapacity);
 
   // initialize values
   std::vector<std::unique_ptr<int>> vals;
   vals.reserve(kCapacity);
-  for (int i = 0; i != capacity_int; ++i) {
-    vals.emplace_back(std::make_unique<int>(i));
+  for (std::size_t i = 0; i != kCapacity; ++i) {
+    vals.emplace_back(std::make_unique<int>(static_cast<int>(i)));
   }
 
   // push by move
-  for (int i = 0; i != capacity_int; ++i) {
+  for (std::size_t i = 0; i != kCapacity; ++i) {
     ASSERT_TRUE(ring.try_push(std::move(vals[i])));
     EXPECT_EQ(vals[i], nullptr); // source becomes null
   }
@@ -193,10 +192,10 @@ TEST(Ring, MoveOnlyType) {
 
   // pop and verify FIFO
   std::unique_ptr<int> out;
-  for (int i = 0; i != capacity_int; ++i) {
+  for (std::size_t i = 0; i != kCapacity; ++i) {
     ASSERT_TRUE(ring.try_pop(out));
     ASSERT_NE(out, nullptr);
-    EXPECT_EQ(*out, i);
+    EXPECT_EQ(*out, static_cast<int>(i));
   }
   EXPECT_TRUE(ring.empty());
 }
