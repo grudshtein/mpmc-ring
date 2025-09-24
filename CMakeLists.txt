@@ -4,13 +4,6 @@ project(mpmc_ring CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# MSVC AddressSanitizer toggle (Windows-only; sanitizers mainly run in Linux CI)
-option(ASAN "Enable AddressSanitizer on MSVC" OFF)
-if (MSVC AND ASAN)
-  message(STATUS "MSVC + ASAN requested; disabling (not supported reliably here).")
-  set(ASAN OFF CACHE BOOL "Enable AddressSanitizer on MSVC" FORCE)
-endif()
-
 # ---- Testing & deps ----
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(CTest)          # defines BUILD_TESTING; provides ctest integration
@@ -26,27 +19,47 @@ add_executable(tests tests/mpmc_tests.cpp)
 target_link_libraries(tests PRIVATE mpmc GTest::gtest GTest::gtest_main)
 get_target_property(GTEST_INC GTest::gtest INTERFACE_INCLUDE_DIRECTORIES)
 if (GTEST_INC)
-  target_include_directories(tests PRIVATE ${GTEST_INC})
+  # Silence third-party header warnings on GCC/Clang (-isystem).
+  target_include_directories(tests SYSTEM PRIVATE ${GTEST_INC})
 endif()
 
 add_executable(bench bench/runner.cpp)
 target_link_libraries(bench PRIVATE mpmc)
 
-# ---- Compiler options ----
+# ---- Compiler options (strict + warnings-as-errors) ----
 if (MSVC)
+  set(MSVC_WARN_OPTS
+      /W4 /WX               # high warnings, treat as errors
+      /permissive- /sdl     # standards mode + SDL checks
+      /external:W0 /external:anglebrackets
+      # (optional) quiet low-signal noise:
+      /wd4514 /wd4710 /wd4711 /wd4820 /wd5045
+  )
   foreach(tgt IN ITEMS mpmc tests bench)
-    target_compile_options(${tgt} PRIVATE /O2 /DNDEBUG /W4 /permissive-)
+    target_compile_options(${tgt} PRIVATE
+      ${MSVC_WARN_OPTS}
+      $<$<CONFIG:Release>:/O2 /DNDEBUG>
+    )
   endforeach()
-  if (ASAN)
-    add_link_options(/INCREMENTAL:NO)
-    foreach(tgt IN ITEMS mpmc tests bench)
-      target_compile_options(${tgt} PRIVATE /fsanitize=address)
-      target_link_options(${tgt} PRIVATE /fsanitize=address)
-    endforeach()
-  endif()
 else()
+  # GCC/Clang: strict warnings + treat warnings as errors.
+  set(GCC_CLANG_WARN_OPTS
+      -Wall -Wextra -Wpedantic -Werror
+      -Wconversion -Wsign-conversion -Wshadow
+      -Wformat=2 -Wnull-dereference
+      -Woverloaded-virtual -Wnon-virtual-dtor
+  )
+  if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    list(APPEND GCC_CLANG_WARN_OPTS -Wextra-semi -Wdouble-promotion)
+  elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    list(APPEND GCC_CLANG_WARN_OPTS -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Wuseless-cast)
+  endif()
+
   foreach(tgt IN ITEMS mpmc tests bench)
-    target_compile_options(${tgt} PRIVATE -O3 -DNDEBUG -Wall -Wextra -Wpedantic)
+    target_compile_options(${tgt} PRIVATE
+      ${GCC_CLANG_WARN_OPTS}
+      $<$<CONFIG:Release>:-O3 -DNDEBUG>
+    )
   endforeach()
 endif()
 
