@@ -30,6 +30,8 @@ constexpr std::size_t kCapacity = 64;
 constexpr std::uint64_t kM_Backpress = 1024; // burn cadence
 constexpr int kBurnIters = 500;              // burn intensity
 constexpr std::chrono::seconds kRuntime = std::chrono::seconds(10);
+constexpr std::size_t kNumProducers = 4;
+constexpr std::size_t kNumConsumers = 4;
 
 inline void burn_cycles() {
   volatile int sink = 0;
@@ -58,8 +60,8 @@ TEST(Ring, Destruct) {
   {
     mpmc::MpmcRing<CountingDestructor> ring(kCapacity);
     for (int i = 0; i != capacity_int; ++i) {
-      ASSERT_TRUE(ring.try_push(CountingDestructor{&counter}));
-      --counter;  // cancel out increment from temp destruction
+      EXPECT_TRUE(ring.try_push(CountingDestructor{&counter}));
+      --counter; // cancel out increment from temp destruction
     }
   }
 
@@ -82,18 +84,18 @@ TEST(Ring, CapacityTwo) {
   mpmc::MpmcRing<int> ring(2);
   int v;
 
-  ASSERT_TRUE(ring.try_push(1));
-  ASSERT_TRUE(ring.try_push(2));
+  EXPECT_TRUE(ring.try_push(1));
+  EXPECT_TRUE(ring.try_push(2));
   EXPECT_TRUE(ring.full());
-  ASSERT_FALSE(ring.try_push(3));
+  EXPECT_FALSE(ring.try_push(3));
 
-  ASSERT_TRUE(ring.try_pop(v));
+  EXPECT_TRUE(ring.try_pop(v));
   EXPECT_EQ(v, 1);
-  ASSERT_TRUE(ring.try_push(3));
+  EXPECT_TRUE(ring.try_push(3));
 
-  ASSERT_TRUE(ring.try_pop(v));
+  EXPECT_TRUE(ring.try_pop(v));
   EXPECT_EQ(v, 2);
-  ASSERT_TRUE(ring.try_pop(v));
+  EXPECT_TRUE(ring.try_pop(v));
   EXPECT_EQ(v, 3);
 
   EXPECT_TRUE(ring.empty());
@@ -105,7 +107,7 @@ TEST(Ring, BasicPushPop) {
 
   // test basic push
   for (int i = 0; i != capacity_int; ++i) {
-    ASSERT_TRUE(ring.try_push(i * i));
+    EXPECT_TRUE(ring.try_push(i * i));
   }
 
   // test basic pop
@@ -123,7 +125,7 @@ TEST(Ring, FullEmptyBoundaries) {
   // test push boundaries
   for (int i = 0; i != capacity_int; ++i) {
     EXPECT_FALSE(ring.full());
-    ASSERT_TRUE(ring.try_push(i * i));
+    EXPECT_TRUE(ring.try_push(i * i));
   }
   EXPECT_TRUE(ring.full());
   EXPECT_FALSE(ring.try_push(999));
@@ -145,7 +147,7 @@ TEST(Ring, WrapAroundFifo) {
 
   // fill: 0..7
   for (int i = 0; i != capacity_int; ++i) {
-    ASSERT_TRUE(ring.try_push(i));
+    EXPECT_TRUE(ring.try_push(i));
   }
   EXPECT_TRUE(ring.full());
   EXPECT_FALSE(ring.try_push(999));
@@ -154,12 +156,13 @@ TEST(Ring, WrapAroundFifo) {
   int v;
   for (int i = 0; i != capacity_int / 2; ++i) {
     ASSERT_TRUE(ring.try_pop(v));
+    EXPECT_EQ(v, i);
   }
   EXPECT_FALSE(ring.full());
 
   // refill: 8..11 (forces wrap)
   for (int i = 0; i != capacity_int / 2; ++i) {
-    ASSERT_TRUE(ring.try_push(capacity_int + i));
+    EXPECT_TRUE(ring.try_push(capacity_int + i));
   }
   EXPECT_TRUE(ring.full());
   EXPECT_FALSE(ring.try_push(999));
@@ -185,7 +188,7 @@ TEST(Ring, MoveOnlyType) {
 
   // push by move
   for (std::size_t i = 0; i != kCapacity; ++i) {
-    ASSERT_TRUE(ring.try_push(std::move(vals[i])));
+    EXPECT_TRUE(ring.try_push(std::move(vals[i])));
     EXPECT_EQ(vals[i], nullptr); // source becomes null
   }
   EXPECT_TRUE(ring.full());
@@ -211,7 +214,7 @@ TEST(RingSPSC, BasicPushPop) {
     for (std::uint64_t i = 0; i != kN; ++i) {
       while (!ring.try_push(i)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Producer timeout";
+          ADD_FAILURE() << "Producer timeout";
           return;
         }
         std::this_thread::yield();
@@ -225,7 +228,7 @@ TEST(RingSPSC, BasicPushPop) {
       std::uint64_t out;
       while (!ring.try_pop(out)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Consumer timeout";
+          ADD_FAILURE() << "Consumer timeout";
           return;
         }
         std::this_thread::yield();
@@ -243,7 +246,7 @@ TEST(RingSPSC, BasicPushPop) {
   EXPECT_EQ(consumed_count, kN);
 }
 
-/// Test backpressure caused by slowed producer.
+/// Test SPSC backpressure caused by slowed producer.
 TEST(RingSPSC, BackpressureConsumerFaster) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
@@ -252,11 +255,12 @@ TEST(RingSPSC, BackpressureConsumerFaster) {
 
   std::thread producer([&] {
     for (std::uint64_t i = 0; i != kN; ++i) {
-      if (i % kM_Backpress == 0)
+      if (i % kM_Backpress == 0) {
         burn_cycles();
+      }
       while (!ring.try_push(i)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Producer timeout";
+          ADD_FAILURE() << "Producer timeout";
           return;
         }
         std::this_thread::yield();
@@ -270,7 +274,7 @@ TEST(RingSPSC, BackpressureConsumerFaster) {
       std::uint64_t out;
       while (!ring.try_pop(out)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Consumer timeout";
+          ADD_FAILURE() << "Consumer timeout";
           return;
         }
         std::this_thread::yield();
@@ -288,7 +292,7 @@ TEST(RingSPSC, BackpressureConsumerFaster) {
   EXPECT_EQ(consumed_count, kN);
 }
 
-/// Test backpressure caused by slowed consumer.
+/// Test SPSC backpressure caused by slowed consumer.
 TEST(RingSPSC, BackpressureProducerFaster) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
@@ -299,7 +303,7 @@ TEST(RingSPSC, BackpressureProducerFaster) {
     for (std::uint64_t i = 0; i != kN; ++i) {
       while (!ring.try_push(i)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Producer timeout";
+          ADD_FAILURE() << "Producer timeout";
           return;
         }
         std::this_thread::yield();
@@ -310,12 +314,13 @@ TEST(RingSPSC, BackpressureProducerFaster) {
 
   std::thread consumer([&] {
     for (std::uint64_t i = 0; i != kN; ++i) {
-      if (i % kM_Backpress == 0)
+      if (i % kM_Backpress == 0) {
         burn_cycles();
+      }
       std::uint64_t out;
       while (!ring.try_pop(out)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Consumer timeout";
+          ADD_FAILURE() << "Consumer timeout";
           return;
         }
         std::this_thread::yield();
@@ -333,7 +338,7 @@ TEST(RingSPSC, BackpressureProducerFaster) {
   EXPECT_EQ(consumed_count, kN);
 }
 
-/// Move-only payload across threads.
+/// Move-only payload across threads (SPSC).
 TEST(RingSPSC, MoveOnlyType) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::unique_ptr<std::uint64_t>> ring(kCapacity);
@@ -349,7 +354,7 @@ TEST(RingSPSC, MoveOnlyType) {
           break;
         }
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Producer timeout";
+          ADD_FAILURE() << "Producer timeout";
           return;
         }
         std::this_thread::yield();
@@ -363,7 +368,7 @@ TEST(RingSPSC, MoveOnlyType) {
       std::unique_ptr<std::uint64_t> out;
       while (!ring.try_pop(out)) {
         if (std::chrono::steady_clock::now() > deadline) {
-          FAIL() << "Consumer timeout";
+          ADD_FAILURE() << "Consumer timeout";
           return;
         }
         std::this_thread::yield();
@@ -380,4 +385,268 @@ TEST(RingSPSC, MoveOnlyType) {
   EXPECT_TRUE(ring.empty());
   EXPECT_EQ(produced_count, kN);
   EXPECT_EQ(consumed_count, kN);
+}
+
+/// Validate MPMC publish/observe ordering.
+TEST(RingMPMC, DISABLED_BasicPushPop) {
+  const auto deadline = std::chrono::steady_clock::now() + kRuntime;
+  mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
+
+  std::atomic<std::uint64_t> produced_count = 0;
+  std::vector<std::thread> producers;
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumProducers) {
+        while (!ring.try_push(j)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Producer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        produced_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  std::vector<std::atomic_bool> is_seen(kN);
+  for (auto& s : is_seen) {
+    s.store(false, std::memory_order_relaxed);
+  }
+  std::atomic<std::uint64_t> consumed_count = 0;
+  std::vector<std::thread> consumers;
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumConsumers) {
+        std::uint64_t out;
+        while (!ring.try_pop(out)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Consumer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        ASSERT_LT(out, kN);
+        const auto prev = is_seen[out].exchange(true, std::memory_order_relaxed);
+        ASSERT_FALSE(prev);
+        consumed_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers[i].join();
+  }
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers[i].join();
+  }
+
+  EXPECT_TRUE(ring.empty());
+  EXPECT_EQ(produced_count.load(std::memory_order_relaxed), kN);
+  EXPECT_EQ(consumed_count.load(std::memory_order_relaxed), kN);
+
+  for (std::uint64_t i = 0; i != kN; ++i) {
+    EXPECT_TRUE(is_seen[i].load(std::memory_order_relaxed));
+  }
+}
+
+/// Test MPMC backpressure caused by slowed producer.
+TEST(RingMPMC, DISABLED_BackpressureConsumerFaster) {
+  const auto deadline = std::chrono::steady_clock::now() + kRuntime;
+  mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
+
+  std::atomic<std::uint64_t> produced_count = 0;
+  std::vector<std::thread> producers;
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumProducers) {
+        if (j % kM_Backpress == 0) {
+          burn_cycles();
+        }
+        while (!ring.try_push(j)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Producer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        produced_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  std::vector<std::atomic_bool> is_seen(kN);
+  for (auto& s : is_seen) {
+    s.store(false, std::memory_order_relaxed);
+  }
+  std::atomic<std::uint64_t> consumed_count = 0;
+  std::vector<std::thread> consumers;
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumConsumers) {
+        std::uint64_t out;
+        while (!ring.try_pop(out)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Consumer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        ASSERT_LT(out, kN);
+        const auto prev = is_seen[out].exchange(true, std::memory_order_relaxed);
+        ASSERT_FALSE(prev);
+        consumed_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers[i].join();
+  }
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers[i].join();
+  }
+
+  EXPECT_TRUE(ring.empty());
+  EXPECT_EQ(produced_count.load(std::memory_order_relaxed), kN);
+  EXPECT_EQ(consumed_count.load(std::memory_order_relaxed), kN);
+
+  for (std::uint64_t i = 0; i != kN; ++i) {
+    EXPECT_TRUE(is_seen[i].load(std::memory_order_relaxed));
+  }
+}
+
+/// Test MPMC backpressure caused by slowed consumer.
+TEST(RingMPMC, DISABLED_BackpressureProducerFaster) {
+  const auto deadline = std::chrono::steady_clock::now() + kRuntime;
+  mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
+
+  std::atomic<std::uint64_t> produced_count = 0;
+  std::vector<std::thread> producers;
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumProducers) {
+        while (!ring.try_push(j)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Producer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        produced_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  std::vector<std::atomic_bool> is_seen(kN);
+  for (auto& s : is_seen) {
+    s.store(false, std::memory_order_relaxed);
+  }
+  std::atomic<std::uint64_t> consumed_count = 0;
+  std::vector<std::thread> consumers;
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumConsumers) {
+        std::uint64_t out;
+        if (j % kM_Backpress == 0) {
+          burn_cycles();
+        }
+        while (!ring.try_pop(out)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Consumer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        ASSERT_LT(out, kN);
+        const auto prev = is_seen[out].exchange(true, std::memory_order_relaxed);
+        ASSERT_FALSE(prev);
+        consumed_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers[i].join();
+  }
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers[i].join();
+  }
+
+  EXPECT_TRUE(ring.empty());
+  EXPECT_EQ(produced_count.load(std::memory_order_relaxed), kN);
+  EXPECT_EQ(consumed_count.load(std::memory_order_relaxed), kN);
+
+  for (std::uint64_t i = 0; i != kN; ++i) {
+    EXPECT_TRUE(is_seen[i].load(std::memory_order_relaxed));
+  }
+}
+
+/// Move-only payload across threads (MPMC).
+TEST(RingMPMC, DISABLED_MoveOnlyType) {
+  const auto deadline = std::chrono::steady_clock::now() + kRuntime;
+  mpmc::MpmcRing<std::unique_ptr<std::uint64_t>> ring(kCapacity);
+
+  std::atomic<std::uint64_t> produced_count = 0;
+  std::vector<std::thread> producers;
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumProducers) {
+        while (true) {
+          auto p = std::make_unique<std::uint64_t>(j);
+          if (ring.try_push(std::move(p))) {
+            EXPECT_EQ(p, nullptr); // source was moved-from
+            break;
+          }
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Producer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        produced_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  std::vector<std::atomic_bool> is_seen(kN);
+  for (auto& s : is_seen) {
+    s.store(false, std::memory_order_relaxed);
+  }
+  std::atomic<std::uint64_t> consumed_count = 0;
+  std::vector<std::thread> consumers;
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers.emplace_back([&, i] {
+      for (std::uint64_t j = i; j < kN; j += kNumConsumers) {
+        std::unique_ptr<std::uint64_t> out;
+        while (!ring.try_pop(out)) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            ADD_FAILURE() << "Consumer timeout";
+            return;
+          }
+          std::this_thread::yield();
+        }
+        ASSERT_NE(out, nullptr);
+        ASSERT_LT(*out, kN);
+        const auto prev = is_seen[*out].exchange(true, std::memory_order_relaxed);
+        ASSERT_FALSE(prev);
+        consumed_count.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  for (std::size_t i = 0; i != kNumProducers; ++i) {
+    producers[i].join();
+  }
+  for (std::size_t i = 0; i != kNumConsumers; ++i) {
+    consumers[i].join();
+  }
+
+  EXPECT_TRUE(ring.empty());
+  EXPECT_EQ(produced_count.load(std::memory_order_relaxed), kN);
+  EXPECT_EQ(consumed_count.load(std::memory_order_relaxed), kN);
+
+  for (std::uint64_t i = 0; i != kN; ++i) {
+    EXPECT_TRUE(is_seen[i].load(std::memory_order_relaxed));
+  }
 }
