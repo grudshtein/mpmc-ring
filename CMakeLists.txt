@@ -32,7 +32,8 @@ if (MSVC)
       /W4 /WX               # high warnings, treat as errors
       /permissive- /sdl     # standards mode + SDL checks
       /external:W0 /external:anglebrackets
-      # (optional) quiet low-signal noise:
+      # (intentional/low-signal):
+      /wd4324               # 'structure was padded due to alignment specifier' (alignas cacheline)
       /wd4514 /wd4710 /wd4711 /wd4820 /wd5045
   )
   foreach(tgt IN ITEMS mpmc tests bench)
