@@ -388,7 +388,7 @@ TEST(RingSPSC, MoveOnlyType) {
 }
 
 /// Validate MPMC publish/observe ordering.
-TEST(RingMPMC, DISABLED_BasicPushPop) {
+TEST(RingMPMC, BasicPushPop) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
 
@@ -451,7 +451,7 @@ TEST(RingMPMC, DISABLED_BasicPushPop) {
 }
 
 /// Test MPMC backpressure caused by slowed producer.
-TEST(RingMPMC, DISABLED_BackpressureConsumerFaster) {
+TEST(RingMPMC, BackpressureConsumerFaster) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
 
@@ -517,7 +517,7 @@ TEST(RingMPMC, DISABLED_BackpressureConsumerFaster) {
 }
 
 /// Test MPMC backpressure caused by slowed consumer.
-TEST(RingMPMC, DISABLED_BackpressureProducerFaster) {
+TEST(RingMPMC, BackpressureProducerFaster) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
 
@@ -583,7 +583,7 @@ TEST(RingMPMC, DISABLED_BackpressureProducerFaster) {
 }
 
 /// Move-only payload across threads (MPMC).
-TEST(RingMPMC, DISABLED_MoveOnlyType) {
+TEST(RingMPMC, MoveOnlyType) {
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::unique_ptr<std::uint64_t>> ring(kCapacity);
 
