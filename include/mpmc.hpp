@@ -12,6 +12,12 @@
 
 namespace mpmc {
 
+namespace detail {
+
+inline constexpr std::size_t kCacheLine = 64;
+
+} // namespace detail
+
 // Platform/ABI guarantees for this ring:
 static_assert(sizeof(void*) == 8, "64-bit platform required");
 static_assert(sizeof(std::size_t) == 8, "64-bit size_t required");
@@ -170,8 +176,8 @@ private:
   const std::size_t capacity_;
   const uint64_t mask_;
   Slot* buffer_;
-  std::atomic<uint64_t> head_{0};
-  std::atomic<uint64_t> tail_{0};
+  alignas(detail::kCacheLine) std::atomic<uint64_t> head_{0};
+  alignas(detail::kCacheLine) std::atomic<uint64_t> tail_{0};
 
   /// Validates the fixed ring size. Requirements: c >= 2 and c is a power of two.
   [[nodiscard]] static std::size_t validate_capacity(std::size_t c) {
