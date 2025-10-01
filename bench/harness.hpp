@@ -10,43 +10,19 @@
 #include <thread>
 #include <vector>
 
-// Cross-platform thread affinity helper
-// Linux implementation (pthread_setaffinity_np)
+// Platform-specific includes required for thread affinity support.
 #if defined(__linux__)
 #include <pthread.h>
 #include <sched.h>
 
-inline void set_thread_affinity(std::thread& t, int core_id) {
-  cpu_set_t cpuset;
-  CPU_ZERO(&cpuset);
-  CPU_SET(core_id, &cpuset);
-  int rc = pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-  if (rc != 0) {
-    std::cerr << "pthread_setaffinity_np failed: " << rc << "\n";
-  }
-}
-
-// Windows implementation (SetThreadAffinityMask)
 #elif defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 
-inline void set_thread_affinity(std::thread& t, int core_id) {
-  DWORD_PTR mask = (1ull << core_id);
-  HANDLE handle = (HANDLE)t.native_handle();
-  DWORD_PTR result = SetThreadAffinityMask(handle, mask);
-  if (result == 0) {
-    std::cerr << "SetThreadAffinityMask failed: " << GetLastError() << "\n";
-  }
-}
-
-// Fallback: no-op (e.g. macOS, BSD)
 #else
-inline void set_thread_affinity(std::thread&, int) {
-  // no-op on unsupported platforms
-}
+// no thread affinity support on this platform
 #endif
 
 namespace mpmc::bench {
@@ -54,14 +30,16 @@ namespace mpmc::bench {
 // Pin the current thread
 inline void set_thread_affinity_current(int core_id) {
 #if defined(__linux__)
+  // Linux implementation (pthread_setaffinity_np)
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
-  CPU_SET(core_id, &cpuset);
+  CPU_SET(static_cast<size_t>(core_id), &cpuset);
   int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
   if (rc != 0) {
     throw std::runtime_error("pthread_setaffinity_np failed (self)");
   }
 #elif defined(_WIN32)
+  // Windows implementation (SetThreadAffinityMask)
   DWORD_PTR mask = (1ull << core_id);
   if (SetThreadAffinityMask(GetCurrentThread(), mask) == 0) {
     throw std::runtime_error("SetThreadAffinityMask failed (self)");
