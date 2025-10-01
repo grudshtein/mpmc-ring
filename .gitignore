@@ -1,5 +1,6 @@
 /out/
 /build/
+/results/raw/
 /.vs/
 /CMakeFiles/
 /CMakeCache.txt
