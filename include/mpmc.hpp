@@ -16,6 +16,23 @@ namespace detail {
 
 inline constexpr std::size_t kCacheLine = 64;
 
+template <bool Padding>
+struct Atomic64 : std::atomic<std::uint64_t> {
+  using base = std::atomic<std::uint64_t>;
+  using base::base;
+};
+
+template <>
+struct alignas(kCacheLine) Atomic64<true> : std::atomic<std::uint64_t> {
+  using base = std::atomic<std::uint64_t>;
+  using base::base;
+};
+
+// verify padded atomic is cache-line aligned and sized
+static_assert(alignof(Atomic64<true>) >= kCacheLine, "padded atomic must be cache-line aligned");
+static_assert(sizeof(Atomic64<true>) % kCacheLine == 0,
+              "padded atomic must be a multiple of cache line");
+
 } // namespace detail
 
 // Platform/ABI guarantees for this ring:
@@ -27,7 +44,7 @@ static_assert(std::atomic<uint64_t>::is_always_lock_free,
               "uint64_t atomics must be lock-free on this platform");
 
 // Lock-free bounded MPMC ring for arbitrary T.
-template <typename T>
+template <typename T, bool Padding = false>
 class MpmcRing {
 public:
   /// Construct a fixed-capacity ring.
@@ -176,8 +193,14 @@ private:
   const std::size_t capacity_;
   const uint64_t mask_;
   Slot* buffer_;
-  alignas(detail::kCacheLine) std::atomic<uint64_t> head_{0};
-  alignas(detail::kCacheLine) std::atomic<uint64_t> tail_{0};
+  detail::Atomic64<Padding> head_{0};
+  detail::Atomic64<Padding> tail_{0};
+
+  // verify head_ and tail_ alignment
+  static_assert(!Padding || alignof(decltype(head_)) >= detail::kCacheLine,
+                "head_ must be cache-line aligned when using padding");
+  static_assert(!Padding || alignof(decltype(tail_)) >= detail::kCacheLine,
+                "tail_ must be cache-line aligned when using padding");
 
   /// Validates the fixed ring size. Requirements: c >= 2 and c is a power of two.
   [[nodiscard]] static std::size_t validate_capacity(std::size_t c) {
