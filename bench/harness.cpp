@@ -9,10 +9,11 @@ void Results::combine(const Results& other) {
   try_push_failures += other.try_push_failures;
   try_pop_failures += other.try_pop_failures;
 
-  // spikes
-  push_latencies.worst_spike =
-      std::max(push_latencies.worst_spike, other.push_latencies.worst_spike);
-  pop_latencies.worst_spike = std::max(pop_latencies.worst_spike, other.pop_latencies.worst_spike);
+  // extremes
+  push_latencies.min = std::min(push_latencies.min, other.push_latencies.min);
+  push_latencies.max = std::max(push_latencies.max, other.push_latencies.max);
+  pop_latencies.min = std::min(pop_latencies.min, other.pop_latencies.min);
+  pop_latencies.max = std::max(pop_latencies.max, other.pop_latencies.max);
 
   // histograms
   for (std::size_t i = 0; i < other.push_histogram.size(); ++i) {
@@ -114,9 +115,9 @@ void Results::append_csv() const {
 }
 
 void Results::write_csv_header(std::ostream& os) {
-  os << "capacity"
-     << ",producers"
+  os << "producers"
      << ",consumers"
+     << ",capacity"
      << ",padding_on"
      << ",pinning_on"
      << ",warmup_ms"
@@ -129,6 +130,8 @@ void Results::write_csv_header(std::ostream& os) {
      << ",pops_ok"
      << ",try_push_failures"
      << ",try_pop_failures"
+     << ",try_push_failures_pct"
+     << ",try_pop_failures_pct"
      << ",push_ops_per_sec"
      << ",pop_ops_per_sec"
 
@@ -140,6 +143,7 @@ void Results::write_csv_header(std::ostream& os) {
      << ",push_lat_p999_ns"
      << ",push_lat_max_ns"
      << ",push_lat_mean_ns"
+     << ",push_spikes_over_10x_p50"
 
      // pop latency
      << ",pop_lat_min_ns"
@@ -149,12 +153,7 @@ void Results::write_csv_header(std::ostream& os) {
      << ",pop_lat_p999_ns"
      << ",pop_lat_max_ns"
      << ",pop_lat_mean_ns"
-
-     // spikes
-     << ",push_spikes_over_10x_p50"
-     << ",push_worst_spike_ns"
      << ",pop_spikes_over_10x_p50"
-     << ",pop_worst_spike_ns"
 
      // histograms
      << ",hist_bucket_ns"
@@ -181,10 +180,19 @@ void Results::write_csv_row(std::ostream& os) const {
   const std::string push_hist_str = serialize_hist(push_histogram);
   const std::string pop_hist_str = serialize_hist(pop_histogram);
 
+  const auto try_push_failures_pct = (pushes_ok + try_push_failures > 0)
+                                         ? (100.0 * static_cast<double>(try_push_failures)) /
+                                               static_cast<double>(pushes_ok + try_push_failures)
+                                         : 0.0;
+  const auto try_pop_failures_pct = (pops_ok + try_pop_failures > 0)
+                                        ? (100.0 * static_cast<double>(try_pop_failures)) /
+                                              static_cast<double>(pops_ok + try_pop_failures)
+                                        : 0.0;
+
   // metadata
-  os << config.capacity << ',';
   os << config.num_producers << ',';
   os << config.num_consumers << ',';
+  os << config.capacity << ',';
   os << (config.padding_on ? 1 : 0) << ',';
   os << (config.pinning_on ? 1 : 0) << ',';
   os << config.warmup_ms.count() << ','; // duration types: output as count()
@@ -197,8 +205,10 @@ void Results::write_csv_row(std::ostream& os) const {
   os << pops_ok << ',';
   os << try_push_failures << ',';
   os << try_pop_failures << ',';
-  os << std::setprecision(6) << std::fixed << push_ops_per_sec() << ',';
-  os << std::setprecision(6) << std::fixed << pop_ops_per_sec() << ',';
+  os << std::fixed << std::setprecision(2) << try_push_failures_pct << ',';
+  os << std::fixed << std::setprecision(2) << try_pop_failures_pct << ',';
+  os << static_cast<uint64_t>(push_ops_per_sec()) << ',';
+  os << static_cast<uint64_t>(pop_ops_per_sec()) << ',';
 
   // push latency
   os << push_latencies.min.count() << ',';
@@ -207,7 +217,8 @@ void Results::write_csv_row(std::ostream& os) const {
   os << push_latencies.p99.count() << ',';
   os << push_latencies.p999.count() << ',';
   os << push_latencies.max.count() << ',';
-  os << std::setprecision(3) << std::fixed << push_latencies.mean.count() << ',';
+  os << push_latencies.mean.count() << ',';
+  os << push_latencies.spikes_over_10x_p50 << ',';
 
   // pop latency
   os << pop_latencies.min.count() << ',';
@@ -216,13 +227,8 @@ void Results::write_csv_row(std::ostream& os) const {
   os << pop_latencies.p99.count() << ',';
   os << pop_latencies.p999.count() << ',';
   os << pop_latencies.max.count() << ',';
-  os << std::setprecision(3) << std::fixed << pop_latencies.mean.count() << ',';
-
-  // spikes
-  os << push_latencies.spikes_over_10x_p50 << ',';
-  os << push_latencies.worst_spike.count() << ',';
+  os << pop_latencies.mean.count() << ',';
   os << pop_latencies.spikes_over_10x_p50 << ',';
-  os << pop_latencies.worst_spike.count() << ',';
 
   // histograms
   os << config.histogram_bucket_width.count() << ',';

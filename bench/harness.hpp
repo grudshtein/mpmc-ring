@@ -9,6 +9,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <random>
 
 // Platform-specific includes required for thread affinity support.
 #if defined(__linux__)
@@ -61,12 +62,12 @@ struct Config {
   bool padding_on{false};
   bool trivial_payload{true};
   std::string csv_path{"results/raw/results.csv"};
-  std::uint64_t rng_seed{0};
+  std::uint64_t rng_seed{std::random_device{}()};
 };
 
 struct Results {
   struct LatencyStats {
-    std::chrono::nanoseconds min{0};
+    std::chrono::nanoseconds min{std::chrono::nanoseconds::max()};
     std::chrono::nanoseconds p50{0};
     std::chrono::nanoseconds p95{0};
     std::chrono::nanoseconds p99{0};
@@ -74,7 +75,6 @@ struct Results {
     std::chrono::nanoseconds max{0};
     std::chrono::nanoseconds mean{0};
     uint64_t spikes_over_10x_p50{0}; // tail spikes
-    std::chrono::nanoseconds worst_spike{0};
   };
 
   // metadata
@@ -208,33 +208,44 @@ private:
 
     results.notes = std::to_string(id);
     uint64_t i = 0;
-    auto t0 = std::chrono::steady_clock::now();
+
+    // warmup
+    while (!collecting.load(std::memory_order_relaxed)) {
+      const auto value = id + config_.num_consumers * i;
+      const bool success = [&ring, &value]() {
+        if constexpr (std::is_same_v<T, uint64_t>) {
+          return ring.try_push(value);
+        } else {
+          static_assert(std::is_same_v<T, std::unique_ptr<uint64_t>>);
+          return ring.try_push(std::make_unique<uint64_t>(value));
+        }
+      }();
+      if (success) ++i;
+    }
 
     while (!done.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
-      bool success;
-      if constexpr (std::is_same_v<T, uint64_t>) {
-        success = ring.try_push(value);
-      } else {
-        static_assert(std::is_same_v<T, std::unique_ptr<uint64_t>>);
-        success = ring.try_push(std::make_unique<uint64_t>(value));
-      }
+      const auto t0 = std::chrono::steady_clock::now();
+      const bool success = [&ring, &value]() {
+        if constexpr (std::is_same_v<T, uint64_t>) {
+          return ring.try_push(value);
+        } else {
+          static_assert(std::is_same_v<T, std::unique_ptr<uint64_t>>);
+          return ring.try_push(std::make_unique<uint64_t>(value));
+        }
+      }();
       const auto latency =
           duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0);
 
-      if (!collecting.load(std::memory_order_relaxed)) {
-        continue;
-      }
-
       if (success) {
         ++i;
-        results.push_latencies.worst_spike = std::max(results.push_latencies.worst_spike, latency);
+        results.push_latencies.min = std::min(results.push_latencies.min, latency);
+        results.push_latencies.max = std::max(results.push_latencies.max, latency);
         const auto histogram_idx = std::min(
             static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count()),
             config_.histogram_max_buckets - 1);
         ++results.push_histogram[histogram_idx];
         ++results.pushes_ok;
-        t0 = std::chrono::steady_clock::now();
       } else {
         ++results.try_push_failures;
       }
@@ -252,25 +263,28 @@ private:
     }
 
     results.notes = std::to_string(id);
-    auto t0 = std::chrono::steady_clock::now();
+
+    // warmup
+    while (!collecting.load(std::memory_order_relaxed)) {
+      T out;
+      (void)ring.try_pop(out);
+    }
+
     while (!done.load(std::memory_order_relaxed)) {
       T out;
+      const auto t0 = std::chrono::steady_clock::now();
       const auto success = ring.try_pop(out);
       const auto latency =
           duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0);
 
-      if (!collecting.load(std::memory_order_relaxed)) {
-        continue;
-      }
-
       if (success) {
-        results.pop_latencies.worst_spike = std::max(results.pop_latencies.worst_spike, latency);
+        results.pop_latencies.min = std::min(results.pop_latencies.min, latency);
+        results.pop_latencies.max = std::max(results.pop_latencies.max, latency);
         const auto histogram_idx = std::min(
             static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count()),
             config_.histogram_max_buckets - 1);
         ++results.pop_histogram[histogram_idx];
         ++results.pops_ok;
-        t0 = std::chrono::steady_clock::now();
       } else {
         ++results.try_pop_failures;
       }
