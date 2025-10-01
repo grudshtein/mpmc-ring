@@ -3,13 +3,73 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <numeric>
 #include <ostream>
 #include <string>
 #include <thread>
 #include <vector>
 
+// Cross-platform thread affinity helper
+// Linux implementation (pthread_setaffinity_np)
+#if defined(__linux__)
+#include <pthread.h>
+#include <sched.h>
+
+inline void set_thread_affinity(std::thread& t, int core_id) {
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(core_id, &cpuset);
+  int rc = pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
+  if (rc != 0) {
+    std::cerr << "pthread_setaffinity_np failed: " << rc << "\n";
+  }
+}
+
+// Windows implementation (SetThreadAffinityMask)
+#elif defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+inline void set_thread_affinity(std::thread& t, int core_id) {
+  DWORD_PTR mask = (1ull << core_id);
+  HANDLE handle = (HANDLE)t.native_handle();
+  DWORD_PTR result = SetThreadAffinityMask(handle, mask);
+  if (result == 0) {
+    std::cerr << "SetThreadAffinityMask failed: " << GetLastError() << "\n";
+  }
+}
+
+// Fallback: no-op (e.g. macOS, BSD)
+#else
+inline void set_thread_affinity(std::thread&, int) {
+  // no-op on unsupported platforms
+}
+#endif
+
 namespace mpmc::bench {
+
+// Pin the current thread
+inline void set_thread_affinity_current(int core_id) {
+#if defined(__linux__)
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(core_id, &cpuset);
+  int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  if (rc != 0) {
+    throw std::runtime_error("pthread_setaffinity_np failed (self)");
+  }
+#elif defined(_WIN32)
+  DWORD_PTR mask = (1ull << core_id);
+  if (SetThreadAffinityMask(GetCurrentThread(), mask) == 0) {
+    throw std::runtime_error("SetThreadAffinityMask failed (self)");
+  }
+#else
+  (void)core_id;
+#endif
+}
 
 struct Config {
   std::size_t num_producers{1};
@@ -161,6 +221,13 @@ private:
   template <typename T, bool Padding>
   void producer(std::size_t id, MpmcRing<T, Padding>& ring, Results& results,
                 const std::atomic<bool>& collecting, const std::atomic<bool>& done) const {
+    // pin to CPU core
+    if (config_.pinning_on) {
+      unsigned num_cores = std::thread::hardware_concurrency();
+      int core_id = static_cast<int>(id % num_cores);
+      set_thread_affinity_current(core_id);
+    }
+
     results.notes = std::to_string(id);
     uint64_t i = 0;
     auto t0 = std::chrono::steady_clock::now();
@@ -199,6 +266,13 @@ private:
   template <typename T, bool Padding>
   void consumer(std::size_t id, MpmcRing<T, Padding>& ring, Results& results,
                 const std::atomic<bool>& collecting, const std::atomic<bool>& done) const {
+    // pin to CPU core
+    if (config_.pinning_on) {
+      unsigned num_cores = std::thread::hardware_concurrency();
+      int core_id = static_cast<int>((id + config_.num_producers) % num_cores);
+      set_thread_affinity_current(core_id);
+    }
+
     results.notes = std::to_string(id);
     auto t0 = std::chrono::steady_clock::now();
     while (!done.load(std::memory_order_relaxed)) {
