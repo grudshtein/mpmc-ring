@@ -23,7 +23,8 @@ if (GTEST_INC)
   target_include_directories(tests SYSTEM PRIVATE ${GTEST_INC})
 endif()
 
-add_executable(bench bench/runner.cpp)
+add_executable(bench "bench/main.cpp" "bench/harness.cpp")
+target_include_directories(bench PRIVATE ${CMAKE_SOURCE_DIR}/bench)
 target_link_libraries(bench PRIVATE mpmc)
 
 # ---- Compiler options (strict + warnings-as-errors) ----
