@@ -9,7 +9,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <random>
 
 // Platform-specific includes required for thread affinity support.
 #if defined(__linux__)
@@ -53,7 +52,7 @@ inline void set_thread_affinity_current(int core_id) {
 struct Config {
   std::size_t num_producers{1};
   std::size_t num_consumers{1};
-  std::size_t capacity{256};
+  std::size_t capacity{65'536};
   std::chrono::milliseconds duration_ms{17'500};
   std::chrono::milliseconds warmup_ms{2'500};
   std::chrono::nanoseconds histogram_bucket_width{100};
@@ -62,7 +61,6 @@ struct Config {
   bool padding_on{false};
   bool trivial_payload{true};
   std::string csv_path{"results/raw/results.csv"};
-  std::uint64_t rng_seed{std::random_device{}()};
 };
 
 struct Results {
@@ -96,7 +94,6 @@ struct Results {
   std::vector<uint64_t> pop_histogram{};  // counts per bucket
 
   // notes for reproducibility
-  uint64_t rng_seed{};
   std::string notes{};
 
   // constructor
@@ -220,7 +217,9 @@ private:
           return ring.try_push(std::make_unique<uint64_t>(value));
         }
       }();
-      if (success) ++i;
+      if (success) {
+        ++i;
+      }
     }
 
     while (!done.load(std::memory_order_relaxed)) {

@@ -23,9 +23,16 @@ int run(int argc, char* argv[]) {
     const auto results = harness.run_once();
     const auto t1 = std::chrono::steady_clock::now();
     const auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0).count();
+    auto active_seconds = std::chrono::duration_cast<std::chrono::seconds>(
+                              results.config.duration_ms - results.config.warmup_ms)
+                              .count();
     std::cout << "\n[bench] ran in " << seconds << " s\n";
-    std::cout << results.pushes_ok << "\t" << results.try_push_failures << std::endl;
-    std::cout << results.pops_ok << "\t" << results.try_pop_failures << std::endl;
+    std::cout << "Successful operations in active phase: "
+              << (results.pushes_ok + results.pops_ok) / 1'000'000 << " million\n";
+    std::cout << "Average speed in active phase: "
+              << (results.pushes_ok + results.pops_ok) /
+                     (static_cast<unsigned long long>(active_seconds) * 1'000'000ULL)
+              << " million ops/s\n";
     results.append_csv();
     return 0;
   } catch (const std::invalid_argument& e) {
@@ -69,7 +76,6 @@ inline void print_usage(const char* prog) {
             << "      --padding <on|off>           Padding toggle (default: off)\n"
             << "      --payload <trivial|moveonly> Payload type (default: trivial)\n"
             << "      --csv <PATH>                 CSV output path\n"
-            << "      --seed <N>                   Random seed\n"
             << "  -h, --help                       Show this help message\n";
 }
 
@@ -114,8 +120,6 @@ bench::Config parse_config(int argc, char* argv[]) {
       }
     } else if (arg == "--csv") {
       config.csv_path = require_value(arg);
-    } else if (arg == "--seed") {
-      config.rng_seed = std::stoull(require_value(arg));
     } else if (arg == "--help" || arg == "-h") {
       print_usage(argv[0]);
       std::exit(0);
@@ -134,6 +138,9 @@ bench::Config parse_config(int argc, char* argv[]) {
   if (!is_power_of_two(config.capacity)) {
     throw std::invalid_argument("capacity must be a power of two");
   }
+  if (config.duration_ms <= config.warmup_ms) {
+    throw std::invalid_argument("total duration must be greater than warmup time");
+  }
   if (config.histogram_bucket_width.count() == 0) {
     throw std::invalid_argument("histogram bucket width must be > 0");
   }
@@ -151,8 +158,7 @@ bench::Config parse_config(int argc, char* argv[]) {
             << "  pinning: " << (config.pinning_on ? "on" : "off") << "\n"
             << "  padding: " << (config.padding_on ? "on" : "off") << "\n"
             << "  payload: " << (config.trivial_payload ? "trivial" : "moveonly") << "\n"
-            << "  csv_path: " << config.csv_path << "\n"
-            << "  seed: " << config.rng_seed << "\n";
+            << "  csv_path: " << config.csv_path << "\n";
 
   return config;
 }

@@ -122,7 +122,6 @@ void Results::write_csv_header(std::ostream& os) {
      << ",pinning_on"
      << ",warmup_ms"
      << ",duration_ms"
-     << ",rng_seed"
      << ",wall_time_ns"
 
      // throughput
@@ -197,7 +196,6 @@ void Results::write_csv_row(std::ostream& os) const {
   os << (config.pinning_on ? 1 : 0) << ',';
   os << config.warmup_ms.count() << ','; // duration types: output as count()
   os << config.duration_ms.count() << ',';
-  os << rng_seed << ',';
   os << wall_time.count() << ',';
 
   // throughput
