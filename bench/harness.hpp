@@ -61,6 +61,7 @@ struct Config {
   bool padding_on{true};
   bool trivial_payload{true};
   std::string csv_path{"results/raw/results.csv"};
+  std::string notes{""};
 };
 
 struct Results {

@@ -31,19 +31,6 @@ void Results::set_latencies(LatencyStats& latencies, const std::vector<uint64_t>
   }
   const auto bucket_width = config.histogram_bucket_width;
 
-  // min = first non-empty bucket
-  const auto min_it =
-      std::find_if(histogram.begin(), histogram.end(), [](const auto count) { return count != 0; });
-  const auto min_idx = std::distance(histogram.begin(), min_it);
-  latencies.min = (min_idx * bucket_width) + bucket_width / 2;
-
-  // max = last non-empty bucket
-  const auto max_it = std::find_if(histogram.rbegin(), histogram.rend(),
-                                   [](const auto count) { return count != 0; });
-  const auto max_idx =
-      histogram.size() - 1 - static_cast<std::size_t>(std::distance(histogram.rbegin(), max_it));
-  latencies.max = (max_idx * bucket_width) + bucket_width / 2;
-
   // cumulative percentile counts
   uint64_t rank50 = total * 50 / 100;
   uint64_t rank95 = total * 95 / 100;
@@ -234,7 +221,7 @@ void Results::write_csv_row(std::ostream& os) const {
   os << escape_csv(pop_hist_str) << ',';
 
   // notes
-  os << escape_csv(notes) << '\n';
+  os << escape_csv(config.notes) << '\n';
 }
 
 std::string Results::escape_csv(std::string_view s) {

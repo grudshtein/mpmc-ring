@@ -76,6 +76,7 @@ inline void print_usage(const char* prog) {
             << "      --padding <on|off>           Padding toggle (default: off)\n"
             << "      --payload <trivial|moveonly> Payload type (default: trivial)\n"
             << "      --csv <PATH>                 CSV output path\n"
+            << "      --notes <STRING>             Notes for this run (default: \"\")\n"
             << "  -h, --help                       Show this help message\n";
 }
 
@@ -120,6 +121,8 @@ bench::Config parse_config(int argc, char* argv[]) {
       }
     } else if (arg == "--csv") {
       config.csv_path = require_value(arg);
+    } else if (arg == "--notes") {
+      config.notes = require_value(arg);
     } else if (arg == "--help" || arg == "-h") {
       print_usage(argv[0]);
       std::exit(0);
@@ -158,7 +161,8 @@ bench::Config parse_config(int argc, char* argv[]) {
             << "  pinning: " << (config.pinning_on ? "on" : "off") << "\n"
             << "  padding: " << (config.padding_on ? "on" : "off") << "\n"
             << "  payload: " << (config.trivial_payload ? "trivial" : "moveonly") << "\n"
-            << "  csv_path: " << config.csv_path << "\n";
+            << "  csv_path: " << config.csv_path << "\n"
+            << "  notes: " << config.notes << "\n";
 
   return config;
 }
