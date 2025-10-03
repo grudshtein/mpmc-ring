@@ -56,9 +56,9 @@ struct Config {
   std::chrono::milliseconds duration_ms{17'500};
   std::chrono::milliseconds warmup_ms{2'500};
   std::chrono::nanoseconds histogram_bucket_width{100};
-  std::size_t histogram_max_buckets{1024};
-  bool pinning_on{false};
-  bool padding_on{false};
+  std::size_t histogram_max_buckets{1'024};
+  bool pinning_on{true};
+  bool padding_on{true};
   bool trivial_payload{true};
   std::string csv_path{"results/raw/results.csv"};
 };
