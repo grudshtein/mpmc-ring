@@ -1,5 +1,6 @@
 #include "mpmc.hpp"
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -59,7 +60,8 @@ struct Config {
   std::size_t histogram_max_buckets{1'024};
   bool pinning_on{true};
   bool padding_on{true};
-  bool trivial_payload{true};
+  bool large_payload{false};
+  bool move_only_payload{false};
   std::string csv_path{"results/raw/results.csv"};
   std::string notes{""};
 };
@@ -123,10 +125,18 @@ class Harness {
 public:
   explicit Harness(const Config& config) : config_{config} {}
   inline Results run_once() const {
-    if (config_.trivial_payload) {
-      return run_once<uint64_t>();
+    if (config_.large_payload) {
+      if (config_.move_only_payload) {
+        return run_once<std::unique_ptr<std::array<uint64_t, 128>>>();
+      } else {
+        return run_once<std::array<uint64_t, 128>>();
+      }
     } else {
-      return run_once<std::unique_ptr<uint64_t>>();
+      if (config_.move_only_payload) {
+        return run_once<std::unique_ptr<uint64_t>>();
+      } else {
+        return run_once<uint64_t>();
+      }
     }
   }
 
@@ -210,14 +220,22 @@ private:
     // warmup
     while (!collecting.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
-      const bool success = [&ring, &value]() {
+      const bool success = ring.try_push([&] {
         if constexpr (std::is_same_v<T, uint64_t>) {
-          return ring.try_push(value);
+          return T{value};
+        } else if constexpr (std::is_same_v<T, std::array<uint64_t, 128>>) {
+          std::array<uint64_t, 128> arr{};
+          arr.fill(value);
+          return arr;
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<uint64_t>>) {
+          return std::make_unique<uint64_t>(value);
         } else {
-          static_assert(std::is_same_v<T, std::unique_ptr<uint64_t>>);
-          return ring.try_push(std::make_unique<uint64_t>(value));
+          static_assert(std::is_same_v<T, std::unique_ptr<std::array<uint64_t, 128>>>);
+          auto arr = std::make_unique<std::array<uint64_t, 128>>();
+          arr->fill(value);
+          return arr;
         }
-      }();
+      }());
       if (success) {
         ++i;
       }
@@ -226,14 +244,22 @@ private:
     while (!done.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
       const auto t0 = std::chrono::steady_clock::now();
-      const bool success = [&ring, &value]() {
+      const bool success = ring.try_push([&] {
         if constexpr (std::is_same_v<T, uint64_t>) {
-          return ring.try_push(value);
+          return T{value};
+        } else if constexpr (std::is_same_v<T, std::array<uint64_t, 128>>) {
+          std::array<uint64_t, 128> arr{};
+          arr.fill(value);
+          return arr;
+        } else if constexpr (std::is_same_v<T, std::unique_ptr<uint64_t>>) {
+          return std::make_unique<uint64_t>(value);
         } else {
-          static_assert(std::is_same_v<T, std::unique_ptr<uint64_t>>);
-          return ring.try_push(std::make_unique<uint64_t>(value));
+          static_assert(std::is_same_v<T, std::unique_ptr<std::array<uint64_t, 128>>>);
+          auto arr = std::make_unique<std::array<uint64_t, 128>>();
+          arr->fill(value);
+          return arr;
         }
-      }();
+      }());
       const auto latency =
           duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0);
 

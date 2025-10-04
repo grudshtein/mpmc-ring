@@ -23,16 +23,17 @@ int run(int argc, char* argv[]) {
     const auto results = harness.run_once();
     const auto t1 = std::chrono::steady_clock::now();
     const auto seconds = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0).count();
-    auto active_seconds = std::chrono::duration_cast<std::chrono::seconds>(
-                              results.config.duration_ms - results.config.warmup_ms)
-                              .count();
+    const auto active_seconds = std::chrono::duration_cast<std::chrono::seconds>(
+                                    results.config.duration_ms - results.config.warmup_ms)
+                                    .count();
+    const auto messages_processed = (results.pushes_ok + results.pops_ok) / 2ULL; // total messages
+    const double avg_speed =
+        static_cast<double>(messages_processed) / static_cast<double>(active_seconds);
     std::cout << "\n[bench] ran in " << seconds << " s\n";
-    std::cout << "Successful operations in active phase: "
-              << (results.pushes_ok + results.pops_ok) / 1'000'000 << " million\n";
-    std::cout << "Average speed in active phase: "
-              << (results.pushes_ok + results.pops_ok) /
-                     (static_cast<unsigned long long>(active_seconds) * 1'000'000ULL)
-              << " million ops/s\n";
+    std::cout << "Messages processed (active phase): " << messages_processed / 1'000'000ULL
+              << " million\n";
+    std::cout << "Average speed (active phase): " << std::fixed << std::setprecision(1)
+              << avg_speed / 1'000'000.0 << " million messages/s\n";
     results.append_csv();
     return 0;
   } catch (const std::invalid_argument& e) {
@@ -65,19 +66,20 @@ inline bool parse_bool(const std::string& val) {
 
 inline void print_usage(const char* prog) {
   std::cerr << "\nUsage: " << prog << " [options]:\n"
-            << "  -p, --producers <N>              Number of producers (default: 1)\n"
-            << "  -c, --consumers <N>              Number of consumers (default: 1)\n"
-            << "  -k, --capacity <POW2>            Ring capacity (default: 256)\n"
-            << "  -d, --duration-ms <MS>           Duration in ms (default: 15,000)\n"
-            << "  -w, --warmup-ms <MS>             Warmup in ms (default: 2,000)\n"
-            << "      --hist-bucket-ns <N>         Histogram bucket width in ns (default: 100)\n"
-            << "      --hist-buckets <N>           Max histogram buckets (default: 1024)\n"
-            << "      --pinning <on|off>           Thread affinity (default: off)\n"
-            << "      --padding <on|off>           Padding toggle (default: off)\n"
-            << "      --payload <trivial|moveonly> Payload type (default: trivial)\n"
-            << "      --csv <PATH>                 CSV output path\n"
-            << "      --notes <STRING>             Notes for this run (default: \"\")\n"
-            << "  -h, --help                       Show this help message\n";
+            << "  -p, --producers <N>               Number of producers (default: 1)\n"
+            << "  -c, --consumers <N>               Number of consumers (default: 1)\n"
+            << "  -k, --capacity <POW2>             Ring capacity (default: 256)\n"
+            << "  -d, --duration-ms <MS>            Duration in ms (default: 15,000)\n"
+            << "  -w, --warmup-ms <MS>              Warmup in ms (default: 2,000)\n"
+            << "      --hist-bucket-ns <N>          Histogram bucket width in ns (default: 100)\n"
+            << "      --hist-buckets <N>            Max histogram buckets (default: 1024)\n"
+            << "      --pinning <on|off>            Thread affinity (default: off)\n"
+            << "      --padding <on|off>            Padding toggle (default: off)\n"
+            << "      --large-payload <on|off>      Use large payload type (default: off)\n"
+            << "      --move-only-payload <on|off>  Use move-only payload type (default: off)\n"
+            << "      --csv <PATH>                  CSV output path\n"
+            << "      --notes <STRING>              Notes for this run (default: \"\")\n"
+            << "  -h, --help                        Show this help message\n";
 }
 
 bench::Config parse_config(int argc, char* argv[]) {
@@ -110,15 +112,10 @@ bench::Config parse_config(int argc, char* argv[]) {
       config.pinning_on = parse_bool(require_value(arg));
     } else if (arg == "--padding") {
       config.padding_on = parse_bool(require_value(arg));
-    } else if (arg == "--payload") {
-      std::string val = to_lower(require_value(arg));
-      if (val == "trivial") {
-        config.trivial_payload = true;
-      } else if (val == "moveonly") {
-        config.trivial_payload = false;
-      } else {
-        throw std::invalid_argument("Invalid payload type: " + val);
-      }
+    } else if (arg == "--large-payload") {
+      config.large_payload = parse_bool(require_value(arg));
+    } else if (arg == "--move-only-payload") {
+      config.move_only_payload = parse_bool(require_value(arg));
     } else if (arg == "--csv") {
       config.csv_path = require_value(arg);
     } else if (arg == "--notes") {
@@ -160,7 +157,8 @@ bench::Config parse_config(int argc, char* argv[]) {
             << "  warmup (ms): " << config.warmup_ms.count() << "\n"
             << "  pinning: " << (config.pinning_on ? "on" : "off") << "\n"
             << "  padding: " << (config.padding_on ? "on" : "off") << "\n"
-            << "  payload: " << (config.trivial_payload ? "trivial" : "moveonly") << "\n"
+            << "  large payload: " << (config.large_payload ? "on" : "off") << "\n"
+            << "  move-only payload: " << (config.move_only_payload ? "on" : "off") << "\n"
             << "  csv_path: " << config.csv_path << "\n"
             << "  notes: " << config.notes << "\n";
 
