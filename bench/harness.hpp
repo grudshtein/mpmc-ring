@@ -217,25 +217,27 @@ private:
     results.notes = std::to_string(id);
     uint64_t i = 0;
 
+    const auto create_item = [](const auto value) {
+      if constexpr (std::is_same_v<T, uint64_t>) {
+        return T{value};
+      } else if constexpr (std::is_same_v<T, std::array<uint64_t, 128>>) {
+        std::array<uint64_t, 128> arr{};
+        arr.fill(value);
+        return arr;
+      } else if constexpr (std::is_same_v<T, std::unique_ptr<uint64_t>>) {
+        return std::make_unique<uint64_t>(value);
+      } else {
+        static_assert(std::is_same_v<T, std::unique_ptr<std::array<uint64_t, 128>>>);
+        auto arr = std::make_unique<std::array<uint64_t, 128>>();
+        arr->fill(value);
+        return arr;
+      }
+    };
+
     // warmup
     while (!collecting.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
-      const bool success = ring.try_push([&] {
-        if constexpr (std::is_same_v<T, uint64_t>) {
-          return T{value};
-        } else if constexpr (std::is_same_v<T, std::array<uint64_t, 128>>) {
-          std::array<uint64_t, 128> arr{};
-          arr.fill(value);
-          return arr;
-        } else if constexpr (std::is_same_v<T, std::unique_ptr<uint64_t>>) {
-          return std::make_unique<uint64_t>(value);
-        } else {
-          static_assert(std::is_same_v<T, std::unique_ptr<std::array<uint64_t, 128>>>);
-          auto arr = std::make_unique<std::array<uint64_t, 128>>();
-          arr->fill(value);
-          return arr;
-        }
-      }());
+      const bool success = ring.try_push(create_item(value));
       if (success) {
         ++i;
       }
@@ -244,22 +246,7 @@ private:
     while (!done.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
       const auto t0 = std::chrono::steady_clock::now();
-      const bool success = ring.try_push([&] {
-        if constexpr (std::is_same_v<T, uint64_t>) {
-          return T{value};
-        } else if constexpr (std::is_same_v<T, std::array<uint64_t, 128>>) {
-          std::array<uint64_t, 128> arr{};
-          arr.fill(value);
-          return arr;
-        } else if constexpr (std::is_same_v<T, std::unique_ptr<uint64_t>>) {
-          return std::make_unique<uint64_t>(value);
-        } else {
-          static_assert(std::is_same_v<T, std::unique_ptr<std::array<uint64_t, 128>>>);
-          auto arr = std::make_unique<std::array<uint64_t, 128>>();
-          arr->fill(value);
-          return arr;
-        }
-      }());
+      const bool success = ring.try_push(create_item(value));
       const auto latency =
           duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0);
 
