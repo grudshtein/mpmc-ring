@@ -107,6 +107,8 @@ void Results::write_csv_header(std::ostream& os) {
      << ",capacity"
      << ",padding_on"
      << ",pinning_on"
+     << ",large_payload"
+     << ",move_only_payload"
      << ",warmup_ms"
      << ",duration_ms"
      << ",wall_time_ns"
@@ -181,7 +183,9 @@ void Results::write_csv_row(std::ostream& os) const {
   os << config.capacity << ',';
   os << (config.padding_on ? 1 : 0) << ',';
   os << (config.pinning_on ? 1 : 0) << ',';
-  os << config.warmup_ms.count() << ','; // duration types: output as count()
+  os << (config.large_payload ? 1 : 0) << ',';
+  os << (config.move_only_payload ? 1 : 0) << ',';
+  os << config.warmup_ms.count() << ',';
   os << config.duration_ms.count() << ',';
   os << wall_time.count() << ',';
 
