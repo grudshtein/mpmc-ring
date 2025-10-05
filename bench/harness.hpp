@@ -44,13 +44,18 @@ inline void set_thread_affinity_current(int core_id) {
     throw std::runtime_error("pthread_setaffinity_np failed (self)");
   }
 #elif defined(_WIN32)
-  // Windows implementation (SetThreadAffinityMask)
-  DWORD_PTR mask = (1ull << core_id);
-  if (SetThreadAffinityMask(GetCurrentThread(), mask) == 0) {
-    throw std::runtime_error("SetThreadAffinityMask failed (self)");
+  // Windows implementation (SetThreadGroupAffinity)
+  if (core_id < 0) {
+    throw std::invalid_argument("core_id must be non-negative");
+  }
+  GROUP_AFFINITY affinity = {};
+  affinity.Group = static_cast<WORD>(core_id / 64);
+  affinity.Mask = 1ull << (core_id % 64);
+  if (!SetThreadGroupAffinity(GetCurrentThread(), &affinity, nullptr)) {
+    throw std::runtime_error("SetThreadGroupAffinity failed");
   }
 #else
-  (void)core_id;
+  (void)core_id; // no-op on unsupported platforms
 #endif
 }
 
