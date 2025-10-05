@@ -14,6 +14,8 @@ void Results::combine(const Results& other) {
   push_latencies.max = std::max(push_latencies.max, other.push_latencies.max);
   pop_latencies.min = std::min(pop_latencies.min, other.pop_latencies.min);
   pop_latencies.max = std::max(pop_latencies.max, other.pop_latencies.max);
+  push_latencies.spikes_over_10x_p50 += other.push_latencies.spikes_over_10x_p50;
+  pop_latencies.spikes_over_10x_p50 += other.pop_latencies.spikes_over_10x_p50;
 
   // histograms
   for (std::size_t i = 0; i < other.push_histogram.size(); ++i) {
@@ -133,7 +135,7 @@ void Results::write_csv_header(std::ostream& os) {
      << ",push_lat_p999_ns"
      << ",push_lat_max_ns"
      << ",push_lat_mean_ns"
-     << ",push_spikes_over_10x_p50"
+     << ",push_spikes_over_10x_p50_pct"
 
      // pop latency
      << ",pop_lat_min_ns"
@@ -143,7 +145,7 @@ void Results::write_csv_header(std::ostream& os) {
      << ",pop_lat_p999_ns"
      << ",pop_lat_max_ns"
      << ",pop_lat_mean_ns"
-     << ",pop_spikes_over_10x_p50"
+     << ",pop_spikes_over_10x_p50_pct"
 
      // histograms
      << ",hist_bucket_ns"

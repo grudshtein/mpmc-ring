@@ -298,6 +298,8 @@ private:
             results.push_histogram[histogram_idx] += SAMPLE_RATE;
           } else {
             results.push_overflows += SAMPLE_RATE;
+            results.push_latencies.spikes_over_10x_p50 +=
+                SAMPLE_RATE; // overflows assumed to be spikes
           }
         }
         ++results.pushes_ok;
@@ -349,6 +351,8 @@ private:
             results.pop_histogram[histogram_idx] += SAMPLE_RATE;
           } else {
             results.pop_overflows += SAMPLE_RATE;
+            results.pop_latencies.spikes_over_10x_p50 +=
+                SAMPLE_RATE; // overflows assumed to be spikes
           }
         }
         ++results.pops_ok;
