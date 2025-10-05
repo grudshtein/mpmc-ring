@@ -1,8 +1,7 @@
 name: ci
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
-  # Linux: sanitizer coverage (clang asan/tsan/ubsan) for correctness and data races
   linux-sanitizers:
     name: Linux (Clang) — ${{ matrix.preset }}
     runs-on: ubuntu-latest
@@ -23,7 +22,6 @@ jobs:
       - name: Run tests
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
-  # Linux: release bench binary for reproducible perf runs
   linux-release-bench:
     name: Linux (Clang) — Release bench
     runs-on: ubuntu-latest
@@ -44,7 +42,6 @@ jobs:
           path: out/build/clang-release/bench
           if-no-files-found: error
 
-  # Windows: MSVC builds (Release + ASan) to prove portability and keep PDBs
   windows-msvc:
     name: Windows (MSVC) — ${{ matrix.cfg.name }}
     runs-on: windows-latest
@@ -59,24 +56,69 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
+
       - name: Configure (${{ matrix.cfg.name }})
         run: cmake --preset ${{ matrix.cfg.preset }}
+
       - name: Build (tests)
         run: cmake --build --preset ${{ matrix.cfg.preset }} --target tests --config ${{ matrix.cfg.config }} -j
-      - name: Run tests
+
+      - name: Run tests (Release)
+        if: ${{ matrix.cfg.name == 'Release' }}
         run: ctest --preset ${{ matrix.cfg.preset }} --output-on-failure -C ${{ matrix.cfg.config }}
+
+      - name: Run tests (ASan) with ASan runtime on PATH
+        if: ${{ matrix.cfg.name == 'ASan' }}
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $install) { throw "VS install not found" }
+
+          $cands = @(
+            "$install\VC\Redist\MSVC\*\asan",
+            "$install\VC\Redist\MSVC\*\AddressSanitizer\x64",
+            "$install\VC\Tools\MSVC\*\bin\Hostx64\x64",
+            "$env:VCToolsRedistDir\asan",
+            "$env:VCToolsRedistDir\AddressSanitizer\x64"
+          )
+
+          $dirs = @()
+          foreach ($p in $cands) {
+            Get-ChildItem -Path $p -Directory -ErrorAction SilentlyContinue | ForEach-Object { $dirs += $_.FullName }
+          }
+          foreach ($p in $cands) {
+            if (Test-Path $p -PathType Container) { $dirs += (Resolve-Path $p).Path }
+          }
+          $dirs = $dirs | Where-Object { Test-Path $_ } | Select-Object -Unique
+          if ($dirs.Count -eq 0) { throw "ASan redist dirs not found" }
+
+          $env:PATH = ($dirs -join ';') + ';' + $env:PATH
+          Write-Host "ASAN PATH: $($dirs -join ';')"
+
+          $dll = Get-ChildItem -Path $dirs -Filter "clang_rt.asan*_dynamic-x64.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($dll) {
+            $outDir = "out\build\${{ matrix.cfg.preset }}\${{ matrix.cfg.config }}"
+            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+            Copy-Item $dll.FullName -Destination $outDir -Force
+            Write-Host "Copied $($dll.FullName) -> $outDir"
+          } else {
+            Write-Host "ASan DLL file not found under listed dirs; relying on PATH."
+          }
+
+          ctest --preset ${{ matrix.cfg.preset }} --output-on-failure -C ${{ matrix.cfg.config }}
+
       - name: Build (bench)
         run: cmake --build --preset ${{ matrix.cfg.preset }} --target bench --config ${{ matrix.cfg.config }} -j
+
       - name: Upload bench artifact
         uses: actions/upload-artifact@v4
         with:
           name: bench-windows-msvc-${{ matrix.cfg.name }}
           path: |
-            out/build/${{ matrix.cfg.preset }}/bench.exe
-            out/build/${{ matrix.cfg.preset }}/bench.pdb
+            out/build/${{ matrix.cfg.preset }}/${{ matrix.cfg.config }}/bench.exe
+            out/build/${{ matrix.cfg.preset }}/${{ matrix.cfg.config }}/bench.pdb
           if-no-files-found: ignore
 
-  # Windows: MinGW release to cover GCC-on-Windows and keep parity with local runs
   windows-mingw:
     name: Windows (MinGW) — Release
     runs-on: windows-latest
