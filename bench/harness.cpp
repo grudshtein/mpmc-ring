@@ -64,7 +64,7 @@ void Results::set_latencies(LatencyStats& latencies, const std::vector<uint64_t>
   latencies.p99 = (p99_idx * bucket_width) + bucket_width / 2;
   latencies.p999 = (p999_idx * bucket_width) + bucket_width / 2;
 
-  long double weighted_sum = 0.0;
+  long double weighted_sum = 0.0L;
   for (size_t i = 0; i < histogram.size(); ++i) {
     weighted_sum += static_cast<long double>(histogram[i]) * ((i + 0.5L) * bucket_width.count());
   }
