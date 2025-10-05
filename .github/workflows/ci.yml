@@ -2,7 +2,7 @@ name: ci
 on: [push, pull_request]
 
 jobs:
-  # Linux: Clang sanitizer matrix + build bench artifact
+  # Linux: sanitizer coverage (clang asan/tsan/ubsan) for correctness and data races
   linux-sanitizers:
     name: Linux (Clang) — ${{ matrix.preset }}
     runs-on: ubuntu-latest
@@ -12,38 +12,31 @@ jobs:
         preset: [clang-asan, clang-tsan, clang-ubsan]
     steps:
       - uses: actions/checkout@v4
-
       - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y clang ninja-build cmake
-
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
-
       - name: Build (tests)
         run: cmake --build --preset ${{ matrix.preset }} --target tests -j
-
       - name: Run tests
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
+  # Linux: release bench binary for reproducible perf runs
   linux-release-bench:
     name: Linux (Clang) — Release bench
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y clang ninja-build cmake
-
       - name: Configure (clang-release)
         run: cmake --preset clang-release
-
       - name: Build (bench)
         run: cmake --build --preset clang-release --target bench -j
-
       - name: Upload bench artifact
         uses: actions/upload-artifact@v4
         with:
@@ -51,7 +44,7 @@ jobs:
           path: out/build/clang-release/bench
           if-no-files-found: error
 
-  # Windows: MSVC Release + MSVC ASan matrix, plus MinGW Release
+  # Windows: MSVC builds (Release + ASan) to prove portability and keep PDBs
   windows-msvc:
     name: Windows (MSVC) — ${{ matrix.cfg.name }}
     runs-on: windows-latest
@@ -66,19 +59,14 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
-
       - name: Configure (${{ matrix.cfg.name }})
         run: cmake --preset ${{ matrix.cfg.preset }}
-
       - name: Build (tests)
         run: cmake --build --preset ${{ matrix.cfg.preset }} --target tests --config ${{ matrix.cfg.config }} -j
-
       - name: Run tests
         run: ctest --preset ${{ matrix.cfg.preset }} --output-on-failure -C ${{ matrix.cfg.config }}
-
       - name: Build (bench)
         run: cmake --build --preset ${{ matrix.cfg.preset }} --target bench --config ${{ matrix.cfg.config }} -j
-
       - name: Upload bench artifact
         uses: actions/upload-artifact@v4
         with:
@@ -88,6 +76,7 @@ jobs:
             out/build/${{ matrix.cfg.preset }}/bench.pdb
           if-no-files-found: ignore
 
+  # Windows: MinGW release to cover GCC-on-Windows and keep parity with local runs
   windows-mingw:
     name: Windows (MinGW) — Release
     runs-on: windows-latest
@@ -96,24 +85,18 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
-
       - name: Install MinGW & Ninja
         run: |
           choco install -y mingw ninja
           echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Configure (mingw-release)
         run: cmake --preset mingw-release
-
       - name: Build (tests)
         run: cmake --build --preset mingw-release --target tests -j
-
       - name: Run tests
         run: ctest --preset mingw-release --output-on-failure
-
       - name: Build (bench)
         run: cmake --build --preset mingw-release --target bench -j
-
       - name: Upload bench artifact
         uses: actions/upload-artifact@v4
         with:
