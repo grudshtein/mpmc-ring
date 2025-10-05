@@ -112,31 +112,29 @@ endforeach()
 
 # MSVC ASan: copy runtime DLL beside tests/bench so ctest can run on CI runners
 if (MSVC AND ENABLE_ASAN)
-  get_filename_component(_cl_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
-  set(_pf   "$ENV{ProgramFiles}")
-  set(_pf86 "$ENV{ProgramFiles(x86)}")
-
-  set(_asan_candidates
-    "${_cl_dir}"
-    "${_cl_dir}/.."
-    "${_cl_dir}/../../.."
-    "${_pf}/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*/bin/Hostx64/x64"
-    "${_pf}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/asan"
-    "${_pf}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/AddressSanitizer/x64"
-    "${_pf86}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/asan"
-    "${_pf86}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/AddressSanitizer/x64"
-  )
-
+  # Prefer toolchain + VS root envs that don't contain parentheses
   set(_asan_dll "")
-  foreach(dir IN LISTS _asan_candidates)
-    file(GLOB _hits "${dir}/clang_rt.asan*_dynamic-x64.dll")
-    if (_hits)
+  set(_candidates "")
+
+  if(DEFINED ENV{VCToolsInstallDir})
+    list(APPEND _candidates
+      "$ENV{VCToolsInstallDir}/bin/Hostx64/x64/clang_rt.asan*_dynamic-x64.dll")
+  endif()
+  if(DEFINED ENV{VSINSTALLDIR})
+    list(APPEND _candidates
+      "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/*/asan/clang_rt.asan*_dynamic-x64.dll"
+      "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/*/AddressSanitizer/x64/clang_rt.asan*_dynamic-x64.dll")
+  endif()
+
+  foreach(p IN LISTS _candidates)
+    file(GLOB _hits "${p}")
+    if(_hits)
       list(GET _hits 0 _asan_dll)
       break()
     endif()
   endforeach()
 
-  if (_asan_dll)
+  if(_asan_dll)
     message(STATUS "MSVC ASan runtime: ${_asan_dll}")
     foreach(tgt IN ITEMS tests bench)
       add_custom_command(TARGET ${tgt} POST_BUILD
@@ -144,7 +142,7 @@ if (MSVC AND ENABLE_ASAN)
                 "${_asan_dll}" $<TARGET_FILE_DIR:${tgt}>)
     endforeach()
   else()
-    message(WARNING "ASan DLL not found; tests may fail with 0xc0000135.")
+    message(WARNING "ASan DLL not found (checked VCToolsInstallDir/VSINSTALLDIR); tests may fail with 0xc0000135.")
   endif()
 endif()
 
