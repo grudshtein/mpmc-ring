@@ -163,19 +163,54 @@ function(get_msvc_asan_path outvar)
   set(${outvar} "${_joined}" PARENT_SCOPE)
 endfunction()
 
-# ctest: discover individual TEST() cases (better for IDEs/Test Explorer)
+# GoogleTest discovery with ASan PATH on MSVC runners
 if (BUILD_TESTING)
   include(GoogleTest)
-  if (MSVC AND ENABLE_ASAN)
-    get_msvc_asan_path(_asan_path_prefix)
-    if (_asan_path_prefix)
-      gtest_discover_tests(tests
-        PROPERTIES ENVIRONMENT "PATH=${_asan_path_prefix};$ENV{PATH}")
-    else()
-      gtest_discover_tests(tests)
-      message(WARNING "ASan redist dirs not found; tests may fail with 0xc0000135.")
+
+  # Collect MSVC AddressSanitizer redist directories that actually exist
+  function(get_msvc_asan_dirs outvar)
+    set(_dirs "")
+
+    if (DEFINED ENV{VCToolsRedistDir})
+      list(APPEND _dirs
+        "$ENV{VCToolsRedistDir}/asan"
+        "$ENV{VCToolsRedistDir}/AddressSanitizer/x64")
     endif()
-  else()
-    gtest_discover_tests(tests)
+
+    if (DEFINED ENV{VSINSTALLDIR})
+      # Glob all tool versions under the VS install; avoids hardcoding VCToolsVersion
+      file(GLOB _verdirs "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/*")
+      foreach(d IN LISTS _verdirs)
+        list(APPEND _dirs "${d}/asan" "${d}/AddressSanitizer/x64")
+      endforeach()
+    endif()
+
+    # Keep only existing dirs
+    set(_existing "")
+    foreach(d IN LISTS _dirs)
+      if (EXISTS "${d}")
+        list(APPEND _existing "${d}")
+      endif()
+    endforeach()
+
+    if (_existing)
+      string(JOIN ";" _joined ${_existing})
+      set(${outvar} "${_joined}" PARENT_SCOPE)
+    else()
+      set(${outvar} "" PARENT_SCOPE)
+    endif()
+  endfunction()
+
+  # Discover tests and attach PATH so ASan runtime DLL is found at run-time
+  gtest_discover_tests(tests TEST_LIST DISCOVERED_TESTS)
+  if (MSVC AND ENABLE_ASAN)
+    get_msvc_asan_dirs(_asan_dirs)
+    if (_asan_dirs)
+      set_tests_properties(${DISCOVERED_TESTS}
+        PROPERTIES ENVIRONMENT "PATH=${_asan_dirs};$ENV{PATH}")
+      message(STATUS "MSVC ASan PATH applied to tests: ${_asan_dirs}")
+    else()
+      message(WARNING "MSVC ASan redist dirs not found; tests may fail with 0xc0000135.")
+    endif()
   endif()
 endif()
