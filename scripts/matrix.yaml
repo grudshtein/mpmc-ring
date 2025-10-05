@@ -98,3 +98,33 @@ suites:
     move-only-payload: [true, false]
     notes: "MPMC-vary-payload"
     repeats: 5
+
+  - producers: [8]
+    consumers: [1]
+    capacity: [1024]
+    pinning: [true, false]
+    padding: [true, false]
+    duration-ms: 4000
+    warmup-ms: 500
+    notes: "Skew-8-producers-1-consumer"
+    repeats: 3
+
+  - producers: [1]
+    consumers: [8]
+    capacity: [1024]
+    pinning: [true, false]
+    padding: [true, false]
+    duration-ms: 4000
+    warmup-ms: 500
+    notes: "Skew-1-producer-8-consumers"
+    repeats: 3
+
+  - producers: [2]
+    consumers: [2]
+    capacity: [2, 4]
+    pinning: [true, false]
+    padding: [false]
+    duration-ms: 3000
+    warmup-ms: 500
+    notes: "MPMC-tiny-capacity"
+    repeats: 5
