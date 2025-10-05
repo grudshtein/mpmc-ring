@@ -2,61 +2,121 @@ name: ci
 on: [push, pull_request]
 
 jobs:
-  # Fast Windows build to prove VS/MSVC builds succeed
+  # Linux: Clang sanitizer matrix + build bench artifact
+  linux-sanitizers:
+    name: Linux (Clang) — ${{ matrix.preset }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [clang-asan, clang-tsan, clang-ubsan]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build cmake
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build (tests)
+        run: cmake --build --preset ${{ matrix.preset }} --target tests -j
+
+      - name: Run tests
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+  linux-release-bench:
+    name: Linux (Clang) — Release bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build cmake
+
+      - name: Configure (clang-release)
+        run: cmake --preset clang-release
+
+      - name: Build (bench)
+        run: cmake --build --preset clang-release --target bench -j
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-linux
+          path: out/build/clang-release/bench
+          if-no-files-found: error
+
+  # Windows: MSVC Release + MSVC ASan matrix, plus MinGW Release
   windows-msvc:
+    name: Windows (MSVC) — ${{ matrix.cfg.name }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - { name: "Release", preset: "msvc-release", config: "Release" }
+          - { name: "ASan",    preset: "msvc-asan",    config: "Release" }
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (${{ matrix.cfg.name }})
+        run: cmake --preset ${{ matrix.cfg.preset }}
+
+      - name: Build (tests)
+        run: cmake --build --preset ${{ matrix.cfg.preset }} --target tests --config ${{ matrix.cfg.config }} -j
+
+      - name: Run tests
+        run: ctest --preset ${{ matrix.cfg.preset }} --output-on-failure -C ${{ matrix.cfg.config }}
+
+      - name: Build (bench)
+        run: cmake --build --preset ${{ matrix.cfg.preset }} --target bench --config ${{ matrix.cfg.config }} -j
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-windows-msvc-${{ matrix.cfg.name }}
+          path: |
+            out/build/${{ matrix.cfg.preset }}/bench.exe
+            out/build/${{ matrix.cfg.preset }}/bench.pdb
+          if-no-files-found: ignore
+
+  windows-mingw:
+    name: Windows (MinGW) — Release
     runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
-  
-      # Single-config build to avoid VS multi-config folder maze
-      - name: Configure (Ninja, Release)
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build
-        run: cmake --build build -j
+      - name: Install MinGW & Ninja
+        run: |
+          choco install -y mingw ninja
+          echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Run tests (ctest)
-        run: ctest --test-dir build --output-on-failure
+      - name: Configure (mingw-release)
+        run: cmake --preset mingw-release
 
-  # Linux job with Address/Undefined sanitizers for UB coverage
-  ubuntu-asan-ubsan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Build (tests)
+        run: cmake --build --preset mingw-release --target tests -j
 
-      - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y ninja-build g++ cmake
+      - name: Run tests
+        run: ctest --preset mingw-release --output-on-failure
 
-      - name: Configure (ASan+UBSan, RelWithDebInfo)
-        env:
-          CFLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
-          CXXFLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -O1 -g"
-          LDFLAGS: "-fsanitize=address,undefined"
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build (bench)
+        run: cmake --build --preset mingw-release --target bench -j
 
-      - name: Build
-        run: cmake --build build -j
-
-      - name: Run tests (sanitizers)
-        run: ctest --test-dir build --output-on-failure
-
-  # ThreadSanitizer (race detector)
-  # ubuntu-tsan:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install toolchain
-  #       run: sudo apt-get update && sudo apt-get install -y ninja-build g++ cmake
-  #     - name: Configure (TSan)
-  #       env:
-  #         CFLAGS: "-fsanitize=thread -fno-omit-frame-pointer -O1 -g"
-  #         CXXFLAGS: "-fsanitize=thread -fno-omit-frame-pointer -O1 -g"
-  #         LDFLAGS: "-fsanitize=thread"
-  #       run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
-  #     - name: Build
-  #       run: cmake --build build -j
-  #     - name: Run tests (TSan)
-  #       run: ctest --test-dir build --output-on-failure
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-windows-mingw
+          path: out/build/mingw-release/bench.exe
+          if-no-files-found: ignore
