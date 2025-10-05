@@ -34,10 +34,10 @@ void Results::set_latencies(LatencyStats& latencies, const std::vector<uint64_t>
   const auto bucket_width = config.histogram_bucket_width;
 
   // cumulative percentile counts
-  uint64_t rank50 = total * 50 / 100;
-  uint64_t rank95 = total * 95 / 100;
-  uint64_t rank99 = total * 99 / 100;
-  uint64_t rank999 = total * 999 / 1000;
+  uint64_t rank50 = (total * 50 + 99) / 100;
+  uint64_t rank95 = (total * 95 + 99) / 100;
+  uint64_t rank99 = (total * 99 + 99) / 100;
+  uint64_t rank999 = (total * 999 + 999) / 1000;
 
   uint64_t cumulative = 0;
   size_t p50_idx = 0, p95_idx = 0, p99_idx = 0, p999_idx = 0;
@@ -147,8 +147,8 @@ void Results::write_csv_header(std::ostream& os) {
 
      // histograms
      << ",hist_bucket_ns"
-     << ",push_overflows"
-     << ",pop_overflows"
+     << ",push_overflow_pct"
+     << ",pop_overflow_pct"
      << ",push_hist_bins" // semicolon-separated counts
      << ",pop_hist_bins"
 
@@ -165,7 +165,7 @@ void Results::write_csv_row(std::ostream& os) const {
       if (i) {
         ss << ';';
       }
-      ss << hist[i] * SAMPLE_RATE;
+      ss << hist[i];
     }
     return ss.str();
   };
@@ -181,6 +181,10 @@ void Results::write_csv_row(std::ostream& os) const {
                                         ? (100.0 * static_cast<double>(try_pop_failures)) /
                                               static_cast<double>(pops_ok + try_pop_failures)
                                         : 0.0;
+  const auto push_overflow_pct =
+      100.0 * static_cast<double>(push_overflows) / static_cast<double>(pushes_ok);
+  const auto pop_overflow_pct =
+      100.0 * static_cast<double>(pop_overflows) / static_cast<double>(pops_ok);
 
   // metadata
   os << config.num_producers << ',';
@@ -226,8 +230,8 @@ void Results::write_csv_row(std::ostream& os) const {
 
   // histograms
   os << config.histogram_bucket_width.count() << ',';
-  os << push_overflows << ',';
-  os << pop_overflows << ',';
+  os << std::fixed << std::setprecision(2) << push_overflow_pct << ',';
+  os << std::fixed << std::setprecision(2) << pop_overflow_pct << ',';
   os << escape_csv(push_hist_str) << ',';
   os << escape_csv(pop_hist_str) << ',';
 

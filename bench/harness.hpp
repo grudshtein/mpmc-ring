@@ -26,6 +26,10 @@
 // no thread affinity support on this platform
 #endif
 
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+#include <x86intrin.h>
+#endif
+
 namespace mpmc::bench {
 
 // Pin the current thread
@@ -71,7 +75,7 @@ struct Config {
   std::size_t capacity{65'536};
   std::chrono::milliseconds duration_ms{17'500};
   std::chrono::milliseconds warmup_ms{2'500};
-  std::chrono::nanoseconds histogram_bucket_width{1};
+  std::chrono::nanoseconds histogram_bucket_width{5};
   std::size_t histogram_max_buckets{4'096};
   bool pinning_on{true};
   bool padding_on{true};
@@ -291,9 +295,9 @@ private:
           const auto histogram_idx =
               static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count());
           if (histogram_idx < config_.histogram_max_buckets) {
-            ++results.push_histogram[histogram_idx];
+            results.push_histogram[histogram_idx] += SAMPLE_RATE;
           } else {
-            ++results.push_overflows;
+            results.push_overflows += SAMPLE_RATE;
           }
         }
         ++results.pushes_ok;
@@ -342,9 +346,9 @@ private:
           const auto histogram_idx =
               static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count());
           if (histogram_idx < config_.histogram_max_buckets) {
-            ++results.pop_histogram[histogram_idx];
+            results.pop_histogram[histogram_idx] += SAMPLE_RATE;
           } else {
-            ++results.pop_overflows;
+            results.pop_overflows += SAMPLE_RATE;
           }
         }
         ++results.pops_ok;

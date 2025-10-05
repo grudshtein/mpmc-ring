@@ -71,7 +71,7 @@ inline void print_usage(const char* prog) {
             << "  -k, --capacity <POW2>             Ring capacity (default: 256)\n"
             << "  -d, --duration-ms <MS>            Duration in ms (default: 15,000)\n"
             << "  -w, --warmup-ms <MS>              Warmup in ms (default: 2,000)\n"
-            << "      --hist-bucket-ns <N>          Histogram bucket width in ns (default: 1)\n"
+            << "      --hist-bucket-ns <N>          Histogram bucket width in ns (default: 5)\n"
             << "      --hist-buckets <N>            Max histogram buckets (default: 4096)\n"
             << "      --pinning <on|off>            Thread affinity (default: on)\n"
             << "      --padding <on|off>            Padding toggle (default: on)\n"
