@@ -113,16 +113,20 @@ endforeach()
 # MSVC ASan: copy runtime DLL beside tests/bench so ctest can run on CI runners
 if (MSVC AND ENABLE_ASAN)
   get_filename_component(_cl_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  set(_pf   "$ENV{ProgramFiles}")
+  set(_pf86 "$ENV{ProgramFiles(x86)}")
+
   set(_asan_candidates
     "${_cl_dir}"
     "${_cl_dir}/.."
     "${_cl_dir}/../../.."
-    "$ENV{ProgramFiles}/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*/bin/Hostx64/x64"
-    "$ENV{ProgramFiles}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/asan"
-    "$ENV{ProgramFiles}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/AddressSanitizer/x64"
-    "$ENV{ProgramFiles(x86)}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/asan"
-    "$ENV{ProgramFiles(x86)}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/AddressSanitizer/x64"
+    "${_pf}/Microsoft Visual Studio/2022/*/VC/Tools/MSVC/*/bin/Hostx64/x64"
+    "${_pf}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/asan"
+    "${_pf}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/AddressSanitizer/x64"
+    "${_pf86}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/asan"
+    "${_pf86}/Microsoft Visual Studio/2022/*/VC/Redist/MSVC/*/AddressSanitizer/x64"
   )
+
   set(_asan_dll "")
   foreach(dir IN LISTS _asan_candidates)
     file(GLOB _hits "${dir}/clang_rt.asan*_dynamic-x64.dll")
@@ -131,7 +135,9 @@ if (MSVC AND ENABLE_ASAN)
       break()
     endif()
   endforeach()
+
   if (_asan_dll)
+    message(STATUS "MSVC ASan runtime: ${_asan_dll}")
     foreach(tgt IN ITEMS tests bench)
       add_custom_command(TARGET ${tgt} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
