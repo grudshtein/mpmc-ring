@@ -60,7 +60,7 @@
       "binaryDir": "out/build/msvc-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL",
         "ENABLE_ASAN": "ON"
       }
     },

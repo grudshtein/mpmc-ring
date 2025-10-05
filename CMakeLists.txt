@@ -108,6 +108,7 @@ if (BUILD_TESTING)
   gtest_discover_tests(tests)  # lets VS/CTest enumerate all TEST() cases
 endif()
 
+# MSVC ASan: instrument googletest (avoids LNK2038 ASan-mismatch) and add /DEBUG for symbolized reports
 if (MSVC AND ENABLE_ASAN)
   foreach(t IN ITEMS gtest gtest_main)
     if (TARGET ${t})
@@ -115,4 +116,28 @@ if (MSVC AND ENABLE_ASAN)
       target_link_options(${t} PRIVATE /DEBUG)
     endif()
   endforeach()
+endif()
+
+# Copy MSVC ASan runtime DLL next to the binaries so ctest can run
+if (MSVC AND ENABLE_ASAN)
+  set(_asan_dll "")
+  foreach(p
+    "$ENV{VCToolsInstallDir}/bin/Hostx64/x64/clang_rt.asan_dynamic-x64.dll"
+    "$ENV{VSINSTALLDIR}/VC/Tools/MSVC/${VCToolsVersion}/bin/Hostx64/x64/clang_rt.asan_dynamic-x64.dll"
+    "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/${VCToolsVersion}/asan/clang_rt.asan_dynamic-x64.dll"
+  )
+    if (EXISTS "${p}")
+      set(_asan_dll "${p}")
+      break()
+    endif()
+  endforeach()
+  if (_asan_dll)
+    foreach(tgt IN ITEMS tests bench)
+      add_custom_command(TARGET ${tgt} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_asan_dll}" $<TARGET_FILE_DIR:${tgt}>)
+    endforeach()
+  else()
+    message(WARNING "MSVC ASan runtime DLL not found; tests may fail with 0xc0000135.")
+  endif()
 endif()
