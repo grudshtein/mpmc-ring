@@ -22,6 +22,8 @@ void Results::combine(const Results& other) {
   for (std::size_t i = 0; i < other.pop_histogram.size(); ++i) {
     pop_histogram[i] += other.pop_histogram[i];
   }
+  push_overflows += other.push_overflows;
+  pop_overflows += other.pop_overflows;
 }
 
 void Results::set_latencies(LatencyStats& latencies, const std::vector<uint64_t>& histogram) {
@@ -145,6 +147,8 @@ void Results::write_csv_header(std::ostream& os) {
 
      // histograms
      << ",hist_bucket_ns"
+     << ",push_overflows"
+     << ",pop_overflows"
      << ",push_hist_bins" // semicolon-separated counts
      << ",pop_hist_bins"
 
@@ -158,9 +162,10 @@ void Results::write_csv_row(std::ostream& os) const {
   auto serialize_hist = [](const std::vector<uint64_t>& hist) {
     std::ostringstream ss;
     for (std::size_t i = 0; i < hist.size(); ++i) {
-      if (i)
+      if (i) {
         ss << ';';
-      ss << hist[i];
+      }
+      ss << hist[i] * SAMPLE_RATE;
     }
     return ss.str();
   };
@@ -221,6 +226,8 @@ void Results::write_csv_row(std::ostream& os) const {
 
   // histograms
   os << config.histogram_bucket_width.count() << ',';
+  os << push_overflows << ',';
+  os << pop_overflows << ',';
   os << escape_csv(push_hist_str) << ',';
   os << escape_csv(pop_hist_str) << ',';
 

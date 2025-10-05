@@ -50,14 +50,29 @@ inline void set_thread_affinity_current(int core_id) {
 #endif
 }
 
+// Get the current value of the processor's cycle counter
+inline uint64_t read_tsc() noexcept {
+#if defined(_MSC_VER)
+  return __rdtsc();
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+  unsigned int aux;
+  return __rdtscp(&aux);
+#else
+  // fallback
+  return std::chrono::steady_clock::now().time_since_epoch().count();
+#endif
+}
+
+constexpr int SAMPLE_RATE = 100; // rate at which to update histogram
+
 struct Config {
   std::size_t num_producers{1};
   std::size_t num_consumers{1};
   std::size_t capacity{65'536};
   std::chrono::milliseconds duration_ms{17'500};
   std::chrono::milliseconds warmup_ms{2'500};
-  std::chrono::nanoseconds histogram_bucket_width{100};
-  std::size_t histogram_max_buckets{1'024};
+  std::chrono::nanoseconds histogram_bucket_width{1};
+  std::size_t histogram_max_buckets{4'096};
   bool pinning_on{true};
   bool padding_on{true};
   bool large_payload{false};
@@ -93,8 +108,10 @@ struct Results {
   LatencyStats pop_latencies;
 
   // histogram
-  std::vector<uint64_t> push_histogram{}; // counts per bucket
-  std::vector<uint64_t> pop_histogram{};  // counts per bucket
+  std::vector<uint64_t> push_histogram{}; // push counts per bucket
+  std::vector<uint64_t> pop_histogram{};  // pop counts per bucket
+  uint64_t push_overflows{};              // push latencies which overflowed histogram range
+  uint64_t pop_overflows{};               // pop latencies which overflowed histogram range
 
   // notes for reproducibility
   std::string notes{};
@@ -167,14 +184,28 @@ private:
     std::vector<Results> producer_results(config_.num_producers, results);
     std::vector<Results> consumer_results(config_.num_consumers, results);
 
+    // measure nanoseconds per cycle
+    double ns_per_cycle;
+    {
+      const auto t0 = std::chrono::steady_clock::now();
+      const uint64_t c0 = read_tsc();
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      const uint64_t c1 = read_tsc();
+      const auto t1 = std::chrono::steady_clock::now();
+      ns_per_cycle =
+          std::chrono::duration<double, std::nano>(t1 - t0).count() / static_cast<double>(c1 - c0);
+    }
+
     for (std::size_t i = 0; i != config_.num_producers; ++i) {
       producers.emplace_back(&Harness::producer<T, Padding>, this, i, std::ref(ring),
-                             std::ref(producer_results[i]), std::cref(collecting), std::cref(done));
+                             std::ref(producer_results[i]), std::cref(collecting), std::cref(done),
+                             ns_per_cycle);
     }
 
     for (std::size_t i = 0; i != config_.num_consumers; ++i) {
       consumers.emplace_back(&Harness::consumer<T, Padding>, this, i, std::ref(ring),
-                             std::ref(consumer_results[i]), std::cref(collecting), std::cref(done));
+                             std::ref(consumer_results[i]), std::cref(collecting), std::cref(done),
+                             ns_per_cycle);
     }
 
     std::this_thread::sleep_for(config_.warmup_ms);
@@ -206,7 +237,8 @@ private:
 
   template <typename T, bool Padding>
   void producer(std::size_t id, MpmcRing<T, Padding>& ring, Results& results,
-                const std::atomic<bool>& collecting, const std::atomic<bool>& done) const {
+                const std::atomic<bool>& collecting, const std::atomic<bool>& done,
+                const double ns_per_cycle) const {
     // pin to CPU core
     if (config_.pinning_on) {
       unsigned num_cores = std::thread::hardware_concurrency();
@@ -245,19 +277,25 @@ private:
 
     while (!done.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
-      const auto t0 = std::chrono::steady_clock::now();
+      const auto t0 = read_tsc();
       const bool success = ring.try_push(create_item(value));
-      const auto latency =
-          duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0);
+      const auto t1 = read_tsc();
+      const auto latency = std::chrono::nanoseconds(
+          static_cast<int64_t>(static_cast<double>(t1 - t0) * ns_per_cycle));
 
       if (success) {
         ++i;
         results.push_latencies.min = std::min(results.push_latencies.min, latency);
         results.push_latencies.max = std::max(results.push_latencies.max, latency);
-        const auto histogram_idx = std::min(
-            static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count()),
-            config_.histogram_max_buckets - 1);
-        ++results.push_histogram[histogram_idx];
+        if ((i % SAMPLE_RATE) == 0) {
+          const auto histogram_idx =
+              static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count());
+          if (histogram_idx < config_.histogram_max_buckets) {
+            ++results.push_histogram[histogram_idx];
+          } else {
+            ++results.push_overflows;
+          }
+        }
         ++results.pushes_ok;
       } else {
         ++results.try_push_failures;
@@ -267,7 +305,8 @@ private:
 
   template <typename T, bool Padding>
   void consumer(std::size_t id, MpmcRing<T, Padding>& ring, Results& results,
-                const std::atomic<bool>& collecting, const std::atomic<bool>& done) const {
+                const std::atomic<bool>& collecting, const std::atomic<bool>& done,
+                const double ns_per_cycle) const {
     // pin to CPU core
     if (config_.pinning_on) {
       unsigned num_cores = std::thread::hardware_concurrency();
@@ -276,27 +315,38 @@ private:
     }
 
     results.notes = std::to_string(id);
+    uint64_t i = 0;
 
     // warmup
     while (!collecting.load(std::memory_order_relaxed)) {
       T out;
-      (void)ring.try_pop(out);
+      const bool success = ring.try_pop(out);
+      if (success) {
+        ++i;
+      }
     }
 
     while (!done.load(std::memory_order_relaxed)) {
       T out;
-      const auto t0 = std::chrono::steady_clock::now();
+      const auto t0 = read_tsc();
       const auto success = ring.try_pop(out);
-      const auto latency =
-          duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0);
+      const auto t1 = read_tsc();
+      const auto latency = std::chrono::nanoseconds(
+          static_cast<int64_t>(static_cast<double>(t1 - t0) * ns_per_cycle));
 
       if (success) {
+        ++i;
         results.pop_latencies.min = std::min(results.pop_latencies.min, latency);
         results.pop_latencies.max = std::max(results.pop_latencies.max, latency);
-        const auto histogram_idx = std::min(
-            static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count()),
-            config_.histogram_max_buckets - 1);
-        ++results.pop_histogram[histogram_idx];
+        if ((i % SAMPLE_RATE) == 0) {
+          const auto histogram_idx =
+              static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count());
+          if (histogram_idx < config_.histogram_max_buckets) {
+            ++results.pop_histogram[histogram_idx];
+          } else {
+            ++results.pop_overflows;
+          }
+        }
         ++results.pops_ok;
       } else {
         ++results.try_pop_failures;
