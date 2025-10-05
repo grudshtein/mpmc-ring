@@ -146,8 +146,36 @@ if (MSVC AND ENABLE_ASAN)
   endif()
 endif()
 
+# Build a PATH prefix that points to MSVC ASan redist dirs on runners
+function(get_msvc_asan_path outvar)
+  set(_dirs "")
+  if(DEFINED ENV{VCToolsRedistDir})
+    list(APPEND _dirs
+      "$ENV{VCToolsRedistDir}/asan"
+      "$ENV{VCToolsRedistDir}/AddressSanitizer/x64")
+  endif()
+  if(DEFINED ENV{VSINSTALLDIR} AND DEFINED ENV{VCToolsVersion})
+    list(APPEND _dirs
+      "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/$ENV{VCToolsVersion}/asan"
+      "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/$ENV{VCToolsVersion}/AddressSanitizer/x64")
+  endif()
+  string(JOIN ";" _joined ${_dirs})
+  set(${outvar} "${_joined}" PARENT_SCOPE)
+endfunction()
+
 # ctest: discover individual TEST() cases (better for IDEs/Test Explorer)
 if (BUILD_TESTING)
   include(GoogleTest)
-  gtest_discover_tests(tests)
+  if (MSVC AND ENABLE_ASAN)
+    get_msvc_asan_path(_asan_path_prefix)
+    if (_asan_path_prefix)
+      gtest_discover_tests(tests
+        PROPERTIES ENVIRONMENT "PATH=${_asan_path_prefix};$ENV{PATH}")
+    else()
+      gtest_discover_tests(tests)
+      message(WARNING "ASan redist dirs not found; tests may fail with 0xc0000135.")
+    endif()
+  else()
+    gtest_discover_tests(tests)
+  endif()
 endif()
