@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import itertools
 import yaml
@@ -14,7 +15,7 @@ def expand_suite(suite):
     combos = [dict(zip(params, values)) for values in itertools.product(*params.values())]
     return repeats, note, combos
 
-def run_suites(bench_path, suites):
+def run_suites(bench_path, suites, csv_path):
     total_runs = sum(expand_suite(s)[0] * len(expand_suite(s)[2]) for s in suites)
     completed = 0
 
@@ -27,6 +28,7 @@ def run_suites(bench_path, suites):
                 cmd += [f"--{k}", str(v)]
             if note:
                 cmd += ["--notes", note]
+            cmd += ["--csv", csv_path]
 
             for r in range(repeats):
                 completed += 1
@@ -37,9 +39,16 @@ def run_suites(bench_path, suites):
     print(f"\nCompleted {completed} run(s).")
 
 def main():
-    with open("scripts/matrix.yaml", encoding="utf-8") as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--matrix")
+    args = parser.parse_args()
+    matrix = args.matrix
+    assert "_" in matrix, "matrix name invalid"
+
+    with open(matrix, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
-    run_suites(cfg["bench"], cfg["suites"])
+    csv_path = "results/raw/" + matrix.split('/')[-1].split('_')[0] + "_results.csv"
+    run_suites(cfg["bench"], cfg["suites"], csv_path)
 
 if __name__ == "__main__":
     main()
