@@ -77,7 +77,8 @@ inline void print_usage(const char* prog) {
             << "      --padding <on|off>            Padding toggle (default: on)\n"
             << "      --large-payload <on|off>      Use large payload type (default: off)\n"
             << "      --move-only-payload <on|off>  Use move-only payload type (default: off)\n"
-            << "      --csv <PATH>                  CSV output path\n"
+            << "      --csv <PATH>                  CSV output path (default: "
+               "\"results/raw/results.csv\")\n"
             << "      --notes <STRING>              Notes for this run (default: \"\")\n"
             << "  -h, --help                        Show this help message\n";
 }
