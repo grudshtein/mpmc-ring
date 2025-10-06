@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <immintrin.h>
 #include <iostream>
 #include <numeric>
 #include <ostream>
@@ -257,6 +258,7 @@ private:
 
     results.notes = std::to_string(id);
     uint64_t i = 0;
+    uint64_t failures = 1;
 
     const auto create_item = [](const auto value) {
       if constexpr (std::is_same_v<T, uint64_t>) {
@@ -281,6 +283,9 @@ private:
       const bool success = ring.try_push(create_item(value));
       if (success) {
         ++i;
+        failures = 1;
+      } else {
+        backoff(failures);
       }
     }
 
@@ -308,8 +313,10 @@ private:
           }
         }
         ++results.pushes_ok;
+        failures = 1;
       } else {
         ++results.try_push_failures;
+        backoff(failures);
       }
     }
   }
@@ -327,6 +334,7 @@ private:
 
     results.notes = std::to_string(id);
     uint64_t i = 0;
+    uint64_t failures = 1;
 
     // warmup
     while (!collecting.load(std::memory_order_relaxed)) {
@@ -334,6 +342,9 @@ private:
       const bool success = ring.try_pop(out);
       if (success) {
         ++i;
+        failures = 1;
+      } else {
+        backoff(failures);
       }
     }
 
@@ -361,10 +372,19 @@ private:
           }
         }
         ++results.pops_ok;
+        failures = 1;
       } else {
         ++results.try_pop_failures;
+        backoff(failures);
       }
     }
+  }
+
+  inline void backoff(uint64_t& failures) const {
+    for (uint64_t i = 0; i < failures; ++i) {
+      _mm_pause();
+    }
+    failures = std::min<uint64_t>(failures * 2, 256);
   }
 };
 
