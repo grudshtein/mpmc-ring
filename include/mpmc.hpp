@@ -10,6 +10,16 @@
 #include <type_traits>
 #include <utility>
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#define CPU_PAUSE() _mm_pause()
+#elif defined(__aarch64__) || defined(__arm__)
+#include <arm_acle.h>
+#define CPU_PAUSE() __yield()
+#else
+#define CPU_PAUSE() ((void)0)
+#endif
+
 namespace mpmc {
 
 namespace detail {
@@ -40,7 +50,7 @@ static_assert(sizeof(void*) == 8, "64-bit platform required");
 static_assert(sizeof(std::size_t) == 8, "64-bit size_t required");
 static_assert(std::atomic<std::size_t>::is_always_lock_free,
               "size_t atomics must be lock-free on this platform");
-static_assert(std::atomic<uint64_t>::is_always_lock_free,
+static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
               "uint64_t atomics must be lock-free on this platform");
 
 // Lock-free bounded MPMC ring for arbitrary T.
@@ -51,12 +61,12 @@ public:
   /// @param capacity Must be power-of-two and >= 2; fixed for object lifetime.
   /// @throws std::invalid_argument if precondition is violated.
   explicit MpmcRing(std::size_t capacity)
-      : capacity_{validate_capacity(capacity)}, mask_{static_cast<uint64_t>(capacity_) - 1},
+      : capacity_{validate_capacity(capacity)}, mask_{static_cast<std::uint64_t>(capacity_) - 1},
         buffer_{nullptr} {
     void* mem = ::operator new[](sizeof(Slot) * capacity_, std::align_val_t{alignof(Slot)});
     buffer_ = static_cast<Slot*>(mem);
     for (std::size_t i = 0; i != capacity_; ++i) {
-      buffer_[i].code_.store(static_cast<uint64_t>(i), std::memory_order_relaxed);
+      buffer_[i].code_.store(static_cast<std::uint64_t>(i), std::memory_order_relaxed);
     }
   }
 
@@ -73,7 +83,7 @@ public:
     if constexpr (!std::is_trivially_destructible_v<T>) {
       const auto head = head_.load(std::memory_order_relaxed);
       const auto tail = tail_.load(std::memory_order_relaxed);
-      for (uint64_t idx = tail; idx != head; ++idx) {
+      for (std::uint64_t idx = tail; idx != head; ++idx) {
         auto slot = get_slot(idx);
         const auto code = slot->code_.load(std::memory_order_acquire);
         if (code != idx + 1) {
@@ -89,7 +99,7 @@ public:
     }
   }
 
-  /// Push by copy.
+  /// Non-blocking push by copy.
   /// @return true on success; false if the ring is full.
   [[nodiscard]] bool try_push(const T& v) noexcept(std::is_nothrow_copy_constructible_v<T>) {
     while (true) {
@@ -116,7 +126,22 @@ public:
     }
   }
 
-  /// Push by move.
+  /// Push by copy.
+  void push(const T& v) noexcept(std::is_nothrow_copy_constructible_v<T>) {
+    const auto ticket = head_.fetch_add(1, std::memory_order_relaxed); // claim the ticket
+    auto* slot = get_slot(ticket);
+    while (true) { // wait until slot is free for this ticket
+      const auto code = slot->code_.load(std::memory_order_acquire);
+      if (code == ticket) {
+        break;
+      }
+      CPU_PAUSE();
+    }
+    std::construct_at(get_data(slot), v);
+    slot->code_.store(ticket + 1, std::memory_order_release);
+  }
+
+  /// Non-blocking push by move.
   /// @return true on success; false if the ring is full.
   [[nodiscard]] bool try_push(T&& v) noexcept(std::is_nothrow_move_constructible_v<T>) {
     while (true) {
@@ -143,7 +168,22 @@ public:
     }
   }
 
-  /// Pop into 'out'.
+  /// Push by move.
+  void push(T&& v) noexcept(std::is_nothrow_move_constructible_v<T>) {
+    const auto ticket = head_.fetch_add(1, std::memory_order_relaxed); // claim the ticket
+    auto* slot = get_slot(ticket);
+    while (true) { // wait until slot is free for this ticket
+      const auto code = slot->code_.load(std::memory_order_acquire);
+      if (code == ticket) {
+        break;
+      }
+      CPU_PAUSE();
+    }
+    std::construct_at(get_data(slot), std::move(v));
+    slot->code_.store(ticket + 1, std::memory_order_release);
+  }
+
+  /// Non-blocking pop into 'out'.
   /// @return true on success; false if the ring is empty.
   [[nodiscard]] bool try_pop(T& out) noexcept(std::is_nothrow_move_assignable_v<T>) {
     while (true) {
@@ -164,11 +204,28 @@ public:
         } else {
           out = std::move(*get_data(slot));
           std::destroy_at(get_data(slot));
-          slot->code_.store(ticket + static_cast<uint64_t>(capacity_), std::memory_order_release);
+          slot->code_.store(ticket + static_cast<std::uint64_t>(capacity_),
+                            std::memory_order_release);
           return true;
         }
       }
     }
+  }
+
+  /// Pop into out.
+  void pop(T& out) noexcept(std::is_nothrow_move_assignable_v<T>) {
+    const auto ticket = tail_.fetch_add(1, std::memory_order_relaxed); // claim the ticket
+    auto* slot = get_slot(ticket);
+    while (true) { // wait until slot is ready for reading
+      const auto code = slot->code_.load(std::memory_order_acquire);
+      if (code == ticket + 1) {
+        break;
+      }
+      CPU_PAUSE();
+    }
+    out = std::move(*get_data(slot));
+    std::destroy_at(get_data(slot));
+    slot->code_.store(ticket + static_cast<std::uint64_t>(capacity_), std::memory_order_release);
   }
 
   /// Capacity in elements (power-of-two).
@@ -186,12 +243,12 @@ public:
 
 private:
   struct Slot {
-    std::atomic<uint64_t> code_;
+    std::atomic<std::uint64_t> code_;
     std::aligned_storage_t<sizeof(T), alignof(T)> storage_;
   };
 
   const std::size_t capacity_;
-  const uint64_t mask_;
+  const std::uint64_t mask_;
   Slot* buffer_;
   detail::Atomic64<Padding> head_{0};
   detail::Atomic64<Padding> tail_{0};
@@ -212,7 +269,7 @@ private:
   }
 
   /// Maps an index to a physical slot in [0, capacity).
-  [[nodiscard]] Slot* get_slot(const uint64_t index) const noexcept {
+  [[nodiscard]] Slot* get_slot(const std::uint64_t index) const noexcept {
     return &buffer_[index & mask_];
   }
 
