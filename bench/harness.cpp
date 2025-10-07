@@ -109,8 +109,9 @@ void Results::write_csv_header(std::ostream& os) {
   os << "producers"
      << ",consumers"
      << ",capacity"
-     << ",padding_on"
+     << ",blocking"
      << ",pinning_on"
+     << ",padding_on"
      << ",large_payload"
      << ",move_only_payload"
      << ",warmup_ms"
@@ -192,8 +193,9 @@ void Results::write_csv_row(std::ostream& os) const {
   os << config.num_producers << ',';
   os << config.num_consumers << ',';
   os << config.capacity << ',';
-  os << (config.padding_on ? 1 : 0) << ',';
+  os << (config.blocking ? 1 : 0) << ',';
   os << (config.pinning_on ? 1 : 0) << ',';
+  os << (config.padding_on ? 1 : 0) << ',';
   os << (config.large_payload ? 1 : 0) << ',';
   os << (config.move_only_payload ? 1 : 0) << ',';
   os << config.warmup_ms.count() << ',';

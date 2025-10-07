@@ -68,9 +68,10 @@ inline void print_usage(const char* prog) {
   std::cerr << "\nUsage: " << prog << " [options]:\n"
             << "  -p, --producers <N>               Number of producers (default: 1)\n"
             << "  -c, --consumers <N>               Number of consumers (default: 1)\n"
-            << "  -k, --capacity <POW2>             Ring capacity (default: 256)\n"
-            << "  -d, --duration-ms <MS>            Duration in ms (default: 15,000)\n"
-            << "  -w, --warmup-ms <MS>              Warmup in ms (default: 2,000)\n"
+            << "  -k, --capacity <POW2>             Ring capacity (default: 65,536)\n"
+            << "      --blocking <on|off>           Blocking queue ops (default: on)\n"
+            << "  -d, --duration-ms <MS>            Duration in ms (default: 17,500)\n"
+            << "  -w, --warmup-ms <MS>              Warmup in ms (default: 2,500)\n"
             << "      --hist-bucket-ns <N>          Histogram bucket width in ns (default: 5)\n"
             << "      --hist-buckets <N>            Max histogram buckets (default: 4096)\n"
             << "      --pinning <on|off>            Thread affinity (default: on)\n"
@@ -101,6 +102,8 @@ bench::Config parse_config(int argc, char* argv[]) {
       config.num_consumers = std::stoull(require_value(arg));
     } else if (arg == "--capacity" || arg == "-k") {
       config.capacity = std::stoull(require_value(arg));
+    } else if (arg == "--blocking") {
+      config.blocking = parse_bool(require_value(arg));
     } else if (arg == "--duration-ms" || arg == "-d") {
       config.duration_ms = std::chrono::milliseconds(std::stoll(require_value(arg)));
     } else if (arg == "--warmup-ms" || arg == "-w") {
@@ -154,6 +157,7 @@ bench::Config parse_config(int argc, char* argv[]) {
             << "  producers: " << config.num_producers << "\n"
             << "  consumers: " << config.num_consumers << "\n"
             << "  capacity: " << config.capacity << "\n"
+            << "  blocking: " << (config.blocking ? "on" : "off") << "\n"
             << "  duration (ms): " << config.duration_ms.count() << "\n"
             << "  warmup (ms): " << config.warmup_ms.count() << "\n"
             << "  pinning: " << (config.pinning_on ? "on" : "off") << "\n"

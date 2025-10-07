@@ -79,6 +79,7 @@ struct Config {
   std::size_t num_producers{1};
   std::size_t num_consumers{1};
   std::size_t capacity{65'536};
+  bool blocking{true};
   std::chrono::milliseconds duration_ms{17'500};
   std::chrono::milliseconds warmup_ms{2'500};
   std::chrono::nanoseconds histogram_bucket_width{5};
@@ -280,7 +281,8 @@ private:
     // warmup
     while (!collecting.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
-      const bool success = ring.try_push(create_item(value));
+      const bool success = config_.blocking ? (ring.push(create_item(value)), true)
+                                            : ring.try_push(create_item(value));
       if (success) {
         ++i;
         failures = 1;
@@ -292,7 +294,8 @@ private:
     while (!done.load(std::memory_order_relaxed)) {
       const auto value = id + config_.num_consumers * i;
       const auto t0 = read_tsc();
-      const bool success = ring.try_push(create_item(value));
+      const bool success = config_.blocking ? (ring.push(create_item(value)), true)
+                                            : ring.try_push(create_item(value));
       const auto t1 = read_tsc();
       const auto latency = std::chrono::nanoseconds(
           static_cast<int64_t>(static_cast<double>(t1 - t0) * ns_per_cycle));
@@ -339,7 +342,7 @@ private:
     // warmup
     while (!collecting.load(std::memory_order_relaxed)) {
       T out;
-      const bool success = ring.try_pop(out);
+      const bool success = config_.blocking ? (ring.pop(out), true) : ring.try_pop(out);
       if (success) {
         ++i;
         failures = 1;
@@ -351,7 +354,7 @@ private:
     while (!done.load(std::memory_order_relaxed)) {
       T out;
       const auto t0 = read_tsc();
-      const auto success = ring.try_pop(out);
+      const bool success = config_.blocking ? (ring.pop(out), true) : ring.try_pop(out);
       const auto t1 = read_tsc();
       const auto latency = std::chrono::nanoseconds(
           static_cast<int64_t>(static_cast<double>(t1 - t0) * ns_per_cycle));
