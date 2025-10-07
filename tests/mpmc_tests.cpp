@@ -650,3 +650,125 @@ TEST(RingMPMC, MoveOnlyType) {
     EXPECT_TRUE(is_seen[i].load(std::memory_order_relaxed));
   }
 }
+
+TEST(RingBlocking, PushPop) {
+  constexpr int capacity_int = static_cast<int>(kCapacity);
+  mpmc::MpmcRing<int> ring(kCapacity);
+
+  // test basic push
+  for (int i = 0; i != capacity_int; ++i) {
+    ring.push(i * i);
+  }
+
+  // test basic pop
+  int v;
+  for (int i = 0; i != capacity_int; ++i) {
+    ring.pop(v);
+    EXPECT_EQ(v, i * i);
+  }
+}
+
+TEST(RingBlocking, PushPopMPMC) {
+  const auto deadline = std::chrono::steady_clock::now() + kRuntime;
+  mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
+  std::uint64_t produced_count = 0;
+  std::uint64_t consumed_count = 0;
+
+  std::thread producer([&] {
+    for (std::uint64_t i = 0; i != kN; ++i) {
+      if (std::chrono::steady_clock::now() > deadline) {
+        ADD_FAILURE() << "Producer timeout";
+        return;
+      }
+      ring.push(i);  // blocking
+      ++produced_count;
+    }
+  });
+
+  std::thread consumer([&] {
+    for (std::uint64_t i = 0; i != kN; ++i) {
+      if (std::chrono::steady_clock::now() > deadline) {
+        ADD_FAILURE() << "Consumer timeout";
+        return;
+      }
+      std::uint64_t out;
+      ring.pop(out);  // blocking
+      ASSERT_EQ(out, i);
+      ++consumed_count;
+    }
+  });
+
+  producer.join();
+  consumer.join();
+
+  EXPECT_TRUE(ring.empty());
+  EXPECT_EQ(produced_count, kN);
+  EXPECT_EQ(consumed_count, kN);
+}
+
+TEST(RingBlocking, PushBlocking) {
+  constexpr int capacity_int = static_cast<int>(kCapacity);
+  mpmc::MpmcRing<int> ring(kCapacity);
+
+  // fill
+  for (auto i = 1; i <= capacity_int; ++i) {
+    ring.push(i * i);
+  }
+  ASSERT_TRUE(ring.full());
+
+  std::atomic<bool> pushed{false};
+  std::thread t([&] {
+    ring.push(-1); // blocks until space
+    pushed.store(true, std::memory_order_release);
+  });
+
+  // wait and check that push blocked
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EXPECT_FALSE(pushed.load(std::memory_order_acquire));
+
+  int out;
+  ASSERT_TRUE(ring.try_pop(out));
+  EXPECT_TRUE(out == 1);
+
+  // wait for push to finish
+  t.join();
+  EXPECT_TRUE(pushed.load(std::memory_order_acquire));
+  EXPECT_TRUE(ring.full());
+}
+
+TEST(RingBlocking, PopBlocking) {
+  mpmc::MpmcRing<int> ring(kCapacity);
+
+  std::atomic<bool> popped{false};
+  int out = 0;
+  std::thread t([&] {
+    ring.pop(out); // blocks until data available
+    popped.store(true, std::memory_order_release);
+  });
+
+  // wait and check that pop blocked
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EXPECT_FALSE(popped.load(std::memory_order_acquire));
+
+  ring.push(1);
+
+  // wait for pop to finish
+  t.join();
+  EXPECT_TRUE(popped.load(std::memory_order_acquire));
+  EXPECT_EQ(out, 1);
+}
+
+TEST(RingBlocking, MoveOnlyType) {
+  mpmc::MpmcRing<std::unique_ptr<int>> ring(kCapacity);
+
+  // push a unique_ptr via blocking push
+  auto p = std::make_unique<int>(1);
+  ring.push(std::move(p));
+  EXPECT_EQ(p, nullptr); // moved-from
+
+  // pop
+  std::unique_ptr<int> out;
+  ring.pop(out);
+  ASSERT_NE(out, nullptr);
+  EXPECT_EQ(*out, 1);
+}
