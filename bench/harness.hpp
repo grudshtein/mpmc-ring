@@ -253,7 +253,7 @@ private:
     // pin to CPU core
     if (config_.pinning_on) {
       unsigned num_cores = std::thread::hardware_concurrency();
-      int core_id = static_cast<int>(id % num_cores);
+      int core_id = static_cast<int>((2 * id) % num_cores);
       set_thread_affinity_current(core_id);
     }
 
@@ -331,7 +331,7 @@ private:
     // pin to CPU core
     if (config_.pinning_on) {
       unsigned num_cores = std::thread::hardware_concurrency();
-      int core_id = static_cast<int>((id + config_.num_producers) % num_cores);
+      int core_id = static_cast<int>((2 * id + 1) % num_cores);
       set_thread_affinity_current(core_id);
     }
 
