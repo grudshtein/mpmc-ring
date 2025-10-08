@@ -44,13 +44,12 @@
         "ENABLE_UBSAN": "ON"
       }
     },
-
     {
       "name": "msvc-ninja-release",
       "generator": "Ninja",
       "binaryDir": "out/build/msvc-ninja-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -66,10 +65,9 @@
       "generator": "Ninja",
       "binaryDir": "out/build/msvc-ninja-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
-
     {
       "name": "mingw-release",
       "generator": "Ninja",
@@ -81,7 +79,6 @@
       }
     }
   ],
-
   "buildPresets": [
     {
       "name": "clang-release",
@@ -116,7 +113,6 @@
       "configurePreset": "mingw-release"
     }
   ],
-
   "testPresets": [
     {
       "name": "clang-release",
