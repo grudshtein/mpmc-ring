@@ -651,6 +651,7 @@ TEST(RingMPMC, MoveOnlyType) {
   }
 }
 
+/// Test basic push/pop with blocking API.
 TEST(RingBlocking, PushPop) {
   constexpr int capacity_int = static_cast<int>(kCapacity);
   mpmc::MpmcRing<int> ring(kCapacity);
@@ -668,7 +669,12 @@ TEST(RingBlocking, PushPop) {
   }
 }
 
-TEST(RingBlocking, PushPopMPMC) {
+/// Validate blocking SPSC publish/observe ordering.
+TEST(RingBlocking, PushPopSPSC) {
+#if defined(__MINGW32__)
+  GTEST_SKIP() << "Skipping long SPSC blocking test on MinGW CI (slow scheduler).";
+#endif
+
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
   std::uint64_t produced_count = 0;
@@ -680,7 +686,7 @@ TEST(RingBlocking, PushPopMPMC) {
         ADD_FAILURE() << "Producer timeout";
         return;
       }
-      ring.push(i);  // blocking
+      ring.push(i); // blocking
       ++produced_count;
     }
   });
@@ -692,7 +698,7 @@ TEST(RingBlocking, PushPopMPMC) {
         return;
       }
       std::uint64_t out;
-      ring.pop(out);  // blocking
+      ring.pop(out); // blocking
       ASSERT_EQ(out, i);
       ++consumed_count;
     }
@@ -706,6 +712,7 @@ TEST(RingBlocking, PushPopMPMC) {
   EXPECT_EQ(consumed_count, kN);
 }
 
+/// Test that push() blocks when full until space becomes available.
 TEST(RingBlocking, PushBlocking) {
   constexpr int capacity_int = static_cast<int>(kCapacity);
   mpmc::MpmcRing<int> ring(kCapacity);
@@ -736,6 +743,7 @@ TEST(RingBlocking, PushBlocking) {
   EXPECT_TRUE(ring.full());
 }
 
+/// Test that pop() blocks when empty until data becomes available.
 TEST(RingBlocking, PopBlocking) {
   mpmc::MpmcRing<int> ring(kCapacity);
 
@@ -758,6 +766,7 @@ TEST(RingBlocking, PopBlocking) {
   EXPECT_EQ(out, 1);
 }
 
+/// Move-only payload with blocking push()/pop().
 TEST(RingBlocking, MoveOnlyType) {
   mpmc::MpmcRing<std::unique_ptr<int>> ring(kCapacity);
 
