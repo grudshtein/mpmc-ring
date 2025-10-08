@@ -57,6 +57,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up MSVC Developer Command Prompt (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          vsversion: "2022"
+
       - name: Configure (${{ matrix.cfg.name }})
         run: cmake --preset ${{ matrix.cfg.preset }}
 
@@ -93,7 +99,7 @@ jobs:
           if ($dirs.Count -eq 0) { throw "ASan redist dirs not found" }
 
           $env:PATH = ($dirs -join ';') + ';' + $env:PATH
-          Write-Host "ASAN PATH: $($dirs -join ';')"
+          Write-Host "ASAN PATH: $($dirs -join ';'))"
 
           $dll = Get-ChildItem -Path $dirs -Filter "clang_rt.asan*_dynamic-x64.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($dll) {

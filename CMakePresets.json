@@ -51,8 +51,6 @@
       "binaryDir": "out/build/msvc-ninja-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl"
       }
     },
     {
@@ -69,8 +67,6 @@
       "binaryDir": "out/build/msvc-ninja-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl"
       }
     },
 
