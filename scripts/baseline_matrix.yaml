@@ -1,0 +1,63 @@
+bench: ./out/build/mingw-release/bench
+
+suites:
+  - producers: [1]
+    consumers: [1]
+    notes: "MPMC-vary-threads"
+    repeats: 5
+  - producers: [2]
+    consumers: [2]
+    notes: "MPMC-vary-threads"
+    repeats: 5
+  - producers: [4]
+    consumers: [4]
+    notes: "MPMC-vary-threads"
+    repeats: 5
+  - producers: [8]
+    consumers: [8]
+    notes: "MPMC-vary-threads"
+    repeats: 5
+  - producers: [16]
+    consumers: [16]
+    notes: "MPMC-vary-threads"
+    repeats: 5
+
+  - producers: [4]
+    consumers: [4]
+    pinning: [true, false]
+    padding: [true, false]
+    repeats: 5
+    notes: "MPMC-vary-pinning-padding"
+
+  - producers: [4]
+    consumers: [4]
+    large-payload: [true, false]
+    move-only-payload: [true, false]
+    notes: "MPMC-vary-payload"
+    repeats: 5
+
+  - producers: [1]
+    consumers: [1]
+    blocking: [false]
+    notes: "MPMC-nonblocking-vary-threads"
+    repeats: 5
+  - producers: [2]
+    consumers: [2]
+    blocking: [false]
+    notes: "MPMC-nonblocking-vary-threads"
+    repeats: 5
+  - producers: [4]
+    consumers: [4]
+    blocking: [false]
+    notes: "MPMC-nonblocking-vary-threads"
+    repeats: 5
+  - producers: [8]
+    consumers: [8]
+    blocking: [false]
+    notes: "MPMC-nonblocking-vary-threads"
+    repeats: 5
+  - producers: [16]
+    consumers: [16]
+    blocking: [false]
+    notes: "MPMC-nonblocking-vary-threads"
+    repeats: 5
