@@ -107,22 +107,18 @@ public:
       auto slot = get_slot(ticket);
       auto code = slot->code_.load(std::memory_order_acquire);
       const auto diff = static_cast<int64_t>(code) - static_cast<int64_t>(ticket);
-
-      if (diff > 0) {
-        continue; // stale: retry
-      } else if (diff < 0) {
-        return false; // slot full: return
-      } else {
-        // claim the ticket
-        if (!head_.compare_exchange_weak(ticket, ticket + 1, std::memory_order_relaxed,
-                                         std::memory_order_relaxed)) {
-          continue; // contention: retry
-        } else {
-          std::construct_at(get_data(slot), v);
-          slot->code_.store(ticket + 1, std::memory_order_release);
-          return true;
-        }
+      if (diff != 0) {
+        return false; // stale or full: return
       }
+
+      // claim the ticket
+      if (!head_.compare_exchange_weak(ticket, ticket + 1, std::memory_order_relaxed,
+                                       std::memory_order_relaxed)) {
+        return false; // contention: return
+      }
+      std::construct_at(get_data(slot), v);
+      slot->code_.store(ticket + 1, std::memory_order_release);
+      return true;
     }
   }
 
@@ -149,22 +145,19 @@ public:
       auto slot = get_slot(ticket);
       auto code = slot->code_.load(std::memory_order_acquire);
       const auto diff = static_cast<int64_t>(code) - static_cast<int64_t>(ticket);
-
-      if (diff > 0) {
-        continue; // stale: retry
-      } else if (diff < 0) {
-        return false; // slot full: return
-      } else {
-        // claim the ticket
-        if (!head_.compare_exchange_weak(ticket, ticket + 1, std::memory_order_relaxed,
-                                         std::memory_order_relaxed)) {
-          continue; // contention: retry
-        } else {
-          std::construct_at(get_data(slot), std::move(v));
-          slot->code_.store(ticket + 1, std::memory_order_release);
-          return true;
-        }
+      if (diff != 0) {
+        return false; // stale or full: return
       }
+
+      // claim the ticket
+      if (!head_.compare_exchange_weak(ticket, ticket + 1, std::memory_order_relaxed,
+                                       std::memory_order_relaxed)) {
+        return false; // contention: return
+      }
+
+      std::construct_at(get_data(slot), std::move(v));
+      slot->code_.store(ticket + 1, std::memory_order_release);
+      return true;
     }
   }
 
@@ -191,24 +184,19 @@ public:
       auto slot = get_slot(ticket);
       auto code = slot->code_.load(std::memory_order_acquire);
       const auto diff = static_cast<int64_t>(code) - static_cast<int64_t>(ticket + 1);
-
-      if (diff > 0) {
-        continue; // stale: retry
-      } else if (diff < 0) {
-        return false; // slot empty: return
-      } else {
-        // claim the ticket
-        if (!tail_.compare_exchange_weak(ticket, ticket + 1, std::memory_order_relaxed,
-                                         std::memory_order_relaxed)) {
-          continue; // contention: retry
-        } else {
-          out = std::move(*get_data(slot));
-          std::destroy_at(get_data(slot));
-          slot->code_.store(ticket + static_cast<std::uint64_t>(capacity_),
-                            std::memory_order_release);
-          return true;
-        }
+      if (diff != 0) {
+        return false; // stale or full: return
       }
+
+      // claim the ticket
+      if (!tail_.compare_exchange_weak(ticket, ticket + 1, std::memory_order_relaxed,
+                                       std::memory_order_relaxed)) {
+        return false; // contention: return
+      }
+      out = std::move(*get_data(slot));
+      std::destroy_at(get_data(slot));
+      slot->code_.store(ticket + static_cast<std::uint64_t>(capacity_), std::memory_order_release);
+      return true;
     }
   }
 
