@@ -21,6 +21,12 @@ suites:
     consumers: [16]
     notes: "MPMC-vary-threads"
     repeats: 5
+    
+  - producers: [4]
+    consumers: [4]
+    capacity: [256, 1024, 4096, 16384, 65536, 262144, 1048576]
+    notes: "MPMC-vary-capacity"
+    repeats: 5
 
   - producers: [4]
     consumers: [4]
