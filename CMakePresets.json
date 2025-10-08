@@ -56,6 +56,14 @@
       }
     },
     {
+      "name": "msvc-ninja-asan",
+      "inherits": "msvc-ninja-release",
+      "binaryDir": "out/build/msvc-ninja-asan",
+      "cacheVariables": {
+        "ENABLE_ASAN": "ON"
+      }
+    },
+    {
       "name": "msvc-ninja-debug",
       "generator": "Ninja",
       "binaryDir": "out/build/msvc-ninja-debug",
@@ -100,6 +108,10 @@
       "configurePreset": "msvc-ninja-release"
     },
     {
+      "name": "msvc-ninja-asan",
+      "configurePreset": "msvc-ninja-asan"
+    },
+    {
       "name": "msvc-ninja-debug",
       "configurePreset": "msvc-ninja-debug"
     },
@@ -129,6 +141,10 @@
     {
       "name": "msvc-ninja-release",
       "configurePreset": "msvc-ninja-release"
+    },
+    {
+      "name": "msvc-ninja-asan",
+      "configurePreset": "msvc-ninja-asan"
     },
     {
       "name": "msvc-ninja-debug",

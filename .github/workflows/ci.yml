@@ -49,8 +49,8 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { name: "Release", preset: "msvc-release", config: "Release" }
-          - { name: "ASan",    preset: "msvc-asan",    config: "Release" }
+          - { name: "Release", preset: "msvc-ninja-release", config: "Release" }
+          - { name: "ASan",    preset: "msvc-ninja-asan",    config: "Release" }
     defaults:
       run:
         shell: pwsh
