@@ -1,4 +1,9 @@
-![ci](https://github.com/grudshtein/mpmc-ring/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/gruds/mpmc-ring/actions/workflows/ci.yml/badge.svg)](https://github.com/gruds/mpmc-ring/actions/workflows/ci.yml) 
+![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?logo=c%2B%2B) 
+![CMake >=3.21](https://img.shields.io/badge/CMake-%3E%3D3.21-064F8C?logo=cmake) 
+![Sanitizers](https://img.shields.io/badge/Sanitizers-ASan%20%7C%20TSan%20%7C%20UBSan-orange) 
+![Compilers](https://img.shields.io/badge/Compilers-MSVC%20%7C%20Clang%20%7C%20GCC-6aa84f) 
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
 # MPMC Ring (bounded, lock-free) — C++20
 
