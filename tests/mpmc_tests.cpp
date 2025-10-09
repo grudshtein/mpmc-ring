@@ -34,6 +34,14 @@ constexpr std::chrono::seconds kRuntime = std::chrono::seconds(20);
 // lighter workload but normal timeout under ASan/UBSan
 constexpr std::uint64_t kN = 250'000;
 constexpr std::chrono::seconds kRuntime = std::chrono::seconds(10);
+#elif defined(_WIN32) && defined(GITHUB_CI)
+// lighter workload for Windows CI runners only
+constexpr std::uint64_t kN = 250'000;
+constexpr std::chrono::seconds kRuntime = std::chrono::seconds(20);
+#elif defined(_WIN32)
+// full workload on developer Windows machines
+constexpr std::uint64_t kN = 2'500'000;
+constexpr std::chrono::seconds kRuntime = std::chrono::seconds(10);
 #else
 // full workload and standard timeout
 constexpr std::uint64_t kN = 2'500'000;

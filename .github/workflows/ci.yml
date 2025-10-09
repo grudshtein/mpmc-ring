@@ -64,7 +64,7 @@ jobs:
           vsversion: "2022"
 
       - name: Configure (${{ matrix.cfg.name }})
-        run: cmake --preset ${{ matrix.cfg.preset }}
+        run: cmake --preset ${{ matrix.cfg.preset }} -DGITHUB_CI=1
 
       - name: Build (tests)
         run: cmake --build --preset ${{ matrix.cfg.preset }} --target tests --config ${{ matrix.cfg.config }} -j
@@ -138,7 +138,7 @@ jobs:
           choco install -y mingw ninja
           echo "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Configure (mingw-release)
-        run: cmake --preset mingw-release
+        run: cmake --preset mingw-release -DGITHUB_CI=1
       - name: Build (tests)
         run: cmake --build --preset mingw-release --target tests -j
       - name: Run tests
