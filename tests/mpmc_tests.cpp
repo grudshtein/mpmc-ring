@@ -9,27 +9,40 @@
 #include <thread>
 #include <vector>
 
-// Detect TSan.
 #if defined(__has_feature)
-#if __has_feature(thread_sanitizer)
-#define RING_TSAN 1
+#  if __has_feature(address_sanitizer) || __has_feature(undefined_sanitizer)
+#    define USING_SANITIZER 1
+#  endif
+#  if __has_feature(thread_sanitizer)
+#    define USING_TSAN 1
+#  endif
 #endif
+
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_UNDEFINED__)
+#  define USING_SANITIZER 1
 #endif
 #if defined(__SANITIZE_THREAD__)
-#define RING_TSAN 1
+#  define USING_TSAN 1
 #endif
 
 namespace {
-#ifdef RING_TSAN
-constexpr std::uint64_t kN = 250'000; // reduce workload under TSan
+#if defined(USING_TSAN)
+// lighter workload and longer timeout under TSan
+constexpr std::uint64_t kN = 250'000;
+constexpr std::chrono::seconds kRuntime = std::chrono::seconds(20);
+#elif defined(USING_SANITIZER)
+// lighter workload but normal timeout under ASan/UBSan
+constexpr std::uint64_t kN = 250'000;
+constexpr std::chrono::seconds kRuntime = std::chrono::seconds(10);
 #else
+// full workload and standard timeout
 constexpr std::uint64_t kN = 2'500'000;
+constexpr std::chrono::seconds kRuntime = std::chrono::seconds(10);
 #endif
 
 constexpr std::size_t kCapacity = 64;
 constexpr std::uint64_t kM_Backpress = 1024; // burn cadence
 constexpr int kBurnIters = 500;              // burn intensity
-constexpr std::chrono::seconds kRuntime = std::chrono::seconds(10);
 constexpr std::size_t kNumProducers = 4;
 constexpr std::size_t kNumConsumers = 4;
 
@@ -671,10 +684,6 @@ TEST(RingBlocking, PushPop) {
 
 /// Validate blocking SPSC publish/observe ordering.
 TEST(RingBlocking, PushPopSPSC) {
-#if defined(__MINGW32__)
-  GTEST_SKIP() << "Skipping long SPSC blocking test on MinGW CI (slow scheduler).";
-#endif
-
   const auto deadline = std::chrono::steady_clock::now() + kRuntime;
   mpmc::MpmcRing<std::uint64_t> ring(kCapacity);
   std::uint64_t produced_count = 0;
