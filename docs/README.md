@@ -6,23 +6,72 @@
 ![Compilers](https://img.shields.io/badge/Compilers-MSVC%20%7C%20Clang%20%7C%20GCC-6aa84f)
 ![Sanitizers](https://img.shields.io/badge/Sanitizers-ASan%20%7C%20TSan%20%7C%20UBSan-orange)
 
-# MPMC Ring (bounded, lock-free) — C++20
+# MPMC Ring (bounded, C++20):
 
-Bounded multi-producer/multi-consumer ring buffer in C++20.  
-Repo includes tests and a small benchmark with p50/p95/p99/p99.9 reporting.
+Bounded multi-producer / multi-consumer ring buffer with:
+- **Blocking, ticketed fast path** and **non-blocking `try_*` API**
+- No mutexes; uses **atomic operations**. 
+- **Per-slot acquire/release** handoff; relaxed cursors
+- **Thread pinning** and **cursor padding**; reproducible bench with CSV output
 
-## Build (Windows, Visual Studio 2022)
-1. Open this folder in Visual Studio as a **CMake project**.
-2. Set **x64 | Release** in the toolbar.
-3. Choose startup item `tests` or `bench`, then run (Ctrl+F5).
+## Build
 
-**Run paths (typical VS CMake):**
-- `out/build/x64-Release/tests.exe`
-- `out/build/x64-Release/bench.exe`
+### Visual Studio (Windows)
+1. Open the folder as a **CMake Project**.
+2. Set **x64 | Release**.
+3. Run `tests` or `bench`.
 
-## Command-line (any shell with CMake)
+Typical paths:
+- `out/build/msvc-ninja-release/tests.exe`
+- `out/build/msvc-ninja-release/bench.exe`
+
+### MSYS2 / MinGW
 ```bash
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
-build/Release/tests.exe
-build/Release/bench.exe
+cmake --preset=mingw-release
+cmake --build --preset=mingw-release -j
+./out/build/mingw-release/bench
+```
+
+## Benchmark defaults
+**Benchmark defaults:** producers=consumers=1, capacity=65,536, mode=blocking, warmup=2,500ms, duration=17,500ms, 
+bucket_width=5ns, buckets=1,024, padding=on, pinning=on, large_payload=off, move_only_payload=off_.
+
+Unless stated otherwise, all figures use (CLI defaults):
+- producers=consumers=4, capacity=65,536, mode=blocking, warmup=2,500ms, duration=17,500ms, padding=on, pinning=on, large_payload=off, move-only-payload=off
+
+**Testbed:** Windows 11 (24H2)
+**CPU:** Intel Core i7-11800H (8c/16t)
+**Compiler:** MSVC 19.44 (Visual Studio 2022 17.10), `/O2 /GL`  
+**Build system:** CMake 4.1.1 + Ninja 1.11.1 (Release) 
+**Power plan:** Legion Balance Mode (OEM Balanced)
+
+### Reproduce a 4p4c run
+```bash
+# Blocking (defaults)
+./out/build/mingw-release/bench --producers 4 --consumers 4
+
+# Non-blocking A/B
+./out/build/mingw-release/bench --producers 4 --consumers 4 --blocking off
+```
+
+## Results (summary):
+![Blocking vs Non-blocking (4p4c)](docs/fig/mode_comparison.png)
+![Latency vs Pinning/Padding (4p4c)](docs/fig/latency_vs_pinning_padding.png)
+![Latency vs Payload (4p4c)](docs/fig/latency_vs_payload.png)
+![Latency vs Threads](docs/fig/latency_vs_threads.png)
+
+### Blocking vs non-blocking:
+At 4p4c, blocking outperforms non-blocking by ~2–3× on this host, while tightening p99/p999.
+### Pinning and padding:
+Materially reduce tail latency.
+### Payload sensitivity:
+Large copyable payloads pay for data movement; move-only payloads keep latency close to small POD.
+### Concurrency:
+As threads increase, p50, p99, and p999 grow.
+
+### Throughput notes:
+- On this Windows testbed, total throughput plateaued by 4p4c despite the ticketed fast path. 
+- Explicit thread pinning (affinity APIs) did not change the result. 
+- Blocking is ~2–3× faster than non-blocking at 4p4c, and pinning/padding primarily tighten tails. 
+- On a single-socket Linux host, higher scaling is expected.
+- Next steps for increased performance: sharding the queue (N sub-rings).
