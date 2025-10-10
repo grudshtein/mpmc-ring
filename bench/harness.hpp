@@ -2,9 +2,9 @@
 
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <immintrin.h>
 #include <iostream>
 #include <numeric>
 #include <ostream>
@@ -27,7 +27,9 @@
 // no thread affinity support on this platform
 #endif
 
-#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+#if defined(_MSC_VER)
+#include <intrin.h>
+#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 #include <x86intrin.h>
 #endif
 
@@ -385,7 +387,7 @@ private:
 
   inline void backoff(uint64_t& failures) const {
     for (uint64_t i = 0; i < failures; ++i) {
-      _mm_pause();
+      CPU_PAUSE();
     }
     failures = std::min<uint64_t>(failures * 2, 256);
   }
