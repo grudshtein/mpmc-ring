@@ -6,13 +6,27 @@
 ![Compilers](https://img.shields.io/badge/Compilers-MSVC%20%7C%20Clang%20%7C%20GCC-6aa84f)
 ![Sanitizers](https://img.shields.io/badge/Sanitizers-ASan%20%7C%20TSan%20%7C%20UBSan-orange)
 
-# MPMC Ring (bounded, C++20):
+# MPMC Ring
+MPMC Ring is a high-performance, bounded multi-producer/multi-consumer ring buffer for C++20.
+It provides a work-conserving blocking (ticketed) path and a non-blocking `try_*` API,
+uses atomic operations (no mutexes), and targets low-latency inter-thread messaging.
+The library is header-only and ships with benchmarks and tests for reproducibility.
 
+## Overview
 Bounded multi-producer / multi-consumer ring buffer with:
-- **Blocking, ticketed fast path** and **non-blocking `try_*` API**
-- No mutexes; uses **atomic operations**. 
-- **Per-slot acquire/release** handoff; relaxed cursors
-- **Thread pinning** and **cursor padding**; reproducible bench with CSV output
+- Blocking, ticketed fast path and non-blocking `try_*` API
+- No mutexes; uses atomic operations. 
+- Per-slot acquire/release handoff; relaxed cursors
+- Thread pinning and cursor padding; reproducible bench with CSV output
+
+## API
+- `try_push(const T&) / try_push(T&&)`: non-blocking; returns `false` if full
+- `push(const T&) / push(T&&)`: blocking (spins) until enqueued
+- `try_pop(T&)`: non-blocking; returns `false` if empty
+- `pop(T&)`: blocking (spins) until dequeued
+- Template: `MpmcRing<T, /*Padding=*/bool>` (cursor padding toggle). Owns bounded storage.
+  
+Full signatures: see [`include/mpmc.hpp`](include/mpmc.hpp).
 
 ## Build
 
@@ -33,11 +47,8 @@ cmake --build --preset=mingw-release -j
 ```
 
 ## Benchmark defaults
-**Benchmark defaults:** producers=consumers=1, capacity=65,536, mode=blocking, warmup=2,500ms, duration=17,500ms, 
-bucket_width=5ns, buckets=1,024, padding=on, pinning=on, large_payload=off, move_only_payload=off_.
-
-Unless stated otherwise, all figures use (CLI defaults):
-- producers=consumers=4, capacity=65,536, mode=blocking, warmup=2,500ms, duration=17,500ms, padding=on, pinning=on, large_payload=off, move-only-payload=off
+**Benchmark defaults:** producers=consumers=1, capacity=65,536, mode=blocking, warmup=2,500 ms, duration=17,500 ms, 
+bucket_width=5 ns, buckets=4,096, padding=on, pinning=on, large_payload=off, move_only_payload=off.
 
 **Testbed:** Windows 11 (24H2)
 **CPU:** Intel Core i7-11800H (8c/16t)
@@ -53,9 +64,14 @@ Unless stated otherwise, all figures use (CLI defaults):
 # Non-blocking A/B
 ./out/build/mingw-release/bench --producers 4 --consumers 4 --blocking off
 ```
+See `--help` for all options and defaults.
 
 ## Results (summary):
-![Blocking vs Non-blocking (4p4c)](docs/fig/mode_comparison.png)
+**Figure settings (used for all charts unless stated):** 
+producers=consumers=4, capacity=65,536, mode=blocking, warmup=2,500 ms, duration=17,500 ms, 
+bucket_width=5 ns, buckets=4,096, padding=on, pinning=on, large_payload=off, move_only_payload=off.
+
+![Blocking vs Non-blocking Throughput (MPMC)](docs/fig/mode_comparison.png)
 ![Latency vs Pinning/Padding (4p4c)](docs/fig/latency_vs_pinning_padding.png)
 ![Latency vs Payload (4p4c)](docs/fig/latency_vs_payload.png)
 ![Latency vs Threads](docs/fig/latency_vs_threads.png)
