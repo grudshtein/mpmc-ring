@@ -1,6 +1,7 @@
 import argparse
-import subprocess
 import itertools
+import os
+import subprocess
 import yaml
 
 def expand_suite(suite):
@@ -34,7 +35,7 @@ def run_suites(bench_path, suites, csv_path):
                 completed += 1
                 print(f"\n[{completed}/{total_runs}] Suite {suite_idx}/{len(suites)}, "
                       f"Combo {combo_idx}/{len(combos)}, Repeat {r+1}/{repeats}")
-                subprocess.run(cmd)
+                subprocess.run(cmd, check=True)
 
     print(f"\nCompleted {completed} run(s).")
 
@@ -47,7 +48,11 @@ def main():
 
     with open(matrix, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
+
+    # CSV name derived from matrix filename prefix (e.g. abc_matrix.yaml = abc_results.csv)
+    os.makedirs("results/raw", exist_ok=True)  # ensure directory exists
     csv_path = "results/raw/" + matrix.split('/')[-1].split('_')[0] + "_results.csv"
+
     run_suites(cfg["bench"], cfg["suites"], csv_path)
 
 if __name__ == "__main__":

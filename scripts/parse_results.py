@@ -1,18 +1,14 @@
-import matplotlib.pyplot as plt
 import argparse
-import pandas as pd
+import os
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from collections import defaultdict
 from matplotlib.ticker import StrMethodFormatter
 
-def get_throughput(row):
-    messages = min(row['pushes_ok'], row['pops_ok'])
-    active_time = (row['duration_ms'] - row['warmup_ms']) / 1000
-    throughput = int(messages / active_time)
-    return throughput
-
+# Group rows by x_str where notes match, return averages of y_str
 def get_avg(df, notes, x_str, y_str):
     data = defaultdict(list)
     for index, row in df.iterrows():
@@ -25,22 +21,35 @@ def get_avg(df, notes, x_str, y_str):
     for x_entry, y_entries in data.items():
         x.append(x_entry)
         y.append(int(sum(y_entries) / len(y_entries)))
+    if not x:
+        return [], []
     x, y = zip(*sorted(zip(x, y)))
     return list(x), list(y)
 
+# Trim trailing low-count bins for plotting
+def trim_histogram(histogram, r=0.005, pad=2):
+    if not histogram:
+        return histogram
+    peak = max(histogram)
+    last_idx = 0
+    for i in range(len(histogram) - 1, -1, -1):
+        if histogram[i] >= peak * r:
+            last_idx = i
+            break
+    return histogram[:min(last_idx + pad + 1, len(histogram))]
+
+# Expects notes == 'MPMC-vary-threads' and producers == 4
 def histogram(df):
     for _, row in df.iterrows():
         if row['notes'] != 'MPMC-vary-threads' or row['producers'] != 4:
             continue
         histogram_str = row['pop_hist_bins']
-        histogram = list(map(int, histogram_str.split(";")))
+        raw_histogram = list(map(int, histogram_str.split(";")))
 
-        # trim trailing counts
-        while histogram and histogram[-1] < 10000:
-            histogram.pop()
-
-        x = [i * 5 for i in range(len(histogram))]
-        y = [v / 1e6 for v in histogram]
+        # trim for plotting
+        h = trim_histogram(raw_histogram)
+        x = [i * 5 for i in range(len(h))]
+        y = [v / 1e6 for v in h]
 
         plt.figure(figsize=(8, 6))
         plt.bar(x, y, width=5, align="edge")
@@ -63,6 +72,7 @@ def histogram(df):
         plt.close()
         return
 
+# Expects notes == 'MPMC-vary-threads'
 def scaling_effect(df):
     plt.figure(figsize=(8, 6))
     plt.grid(True, axis="y", linestyle="--", alpha=0.5)
@@ -82,6 +92,7 @@ def scaling_effect(df):
     plt.savefig("docs/fig/latency_vs_threads.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+# Expects notes == 'MPMC-vary-capacity'
 def capacity_effect(df):
     plt.figure(figsize=(8, 6))
     plt.grid(True, axis="y", linestyle="--", alpha=0.5)
@@ -99,6 +110,7 @@ def capacity_effect(df):
     plt.savefig("docs/fig/latency_vs_capacity.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+# Expects notes == 'MPMC-vary-threads' and 'MPMC-nonblocking-vary-threads'
 def mode_effect(df):
     plt.figure(figsize=(8, 6))
     plt.grid(True, axis="y", linestyle="--", alpha=0.5)
@@ -128,6 +140,7 @@ def mode_effect(df):
     plt.savefig("docs/fig/mode_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+# Expects notes == 'MPMC-vary-pinning-padding'
 def pinning_padding_effect(df):
     data = defaultdict(lambda: defaultdict(lambda: {'p50': [], 'p99': [], 'p999': []}))
 
@@ -156,9 +169,10 @@ def pinning_padding_effect(df):
     for pinning_on in [0, 1]:
         for padding_on in [0, 1]:
             vals = data[pinning_on][padding_on]
-            y = [np.mean(vals[p]) for p in x]
-            plt.plot(x, y, marker='o',
-                     label=label_map[(pinning_on, padding_on)])
+            if all(len(vals[p]) > 0 for p in x):
+                y = [np.mean(vals[p]) for p in x]
+                plt.plot(x, y, marker='o',
+                         label=label_map[(pinning_on, padding_on)])
 
     plt.legend()
     plt.figtext(0.5, -0.05,
@@ -167,6 +181,7 @@ def pinning_padding_effect(df):
     plt.savefig("docs/fig/latency_vs_pinning_padding.png", dpi=300, bbox_inches="tight")
     plt.close()
 
+# Expects notes == 'MPMC-vary-payload'
 def payload_effect(df):
     data = defaultdict(lambda: defaultdict(lambda: {'p50': [], 'p99': [], 'p999': []}))
 
@@ -195,9 +210,10 @@ def payload_effect(df):
     for large in [0, 1]:
         for move_only in [0, 1]:
             vals = data[large][move_only]
-            y = [np.mean(vals[p]) for p in x]
-            plt.plot(x, y, marker='o',
-                     label=label_map[(large, move_only)])
+            if all(len(vals[p]) > 0 for p in x):
+                y = [np.mean(vals[p]) for p in x]
+                plt.plot(x, y, marker='o',
+                         label=label_map[(large, move_only)])
 
     plt.legend()
     plt.figtext(0.5, -0.05,
@@ -210,7 +226,6 @@ def main(results):
     # load the CSV file
     df = pd.read_csv(results)
 
-    import os
     os.makedirs("docs/fig", exist_ok=True)
 
     histogram(df)
@@ -219,6 +234,8 @@ def main(results):
     mode_effect(df)
     pinning_padding_effect(df)
     payload_effect(df)
+
+    plt.close('all')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
