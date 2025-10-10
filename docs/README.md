@@ -75,6 +75,7 @@ bucket_width=5 ns, buckets=4,096, padding=on, pinning=on, large_payload=off, mov
 ![Latency vs Pinning/Padding (4p4c)](fig/latency_vs_pinning_padding.png)
 ![Latency vs Payload (4p4c)](fig/latency_vs_payload.png)
 ![Latency vs Threads](fig/latency_vs_threads.png)
+![Latency Distribution (4p4c)](fig/pop_hist.png)
 
 ### Blocking vs non-blocking:
 At 4p4c, blocking outperforms non-blocking by ~2–3× on this host, while tightening p99/p999.
