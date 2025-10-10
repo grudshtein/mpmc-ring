@@ -146,23 +146,6 @@ if (MSVC AND ENABLE_ASAN)
   endif()
 endif()
 
-# Build a PATH prefix that points to MSVC ASan redist dirs on runners
-function(get_msvc_asan_path outvar)
-  set(_dirs "")
-  if(DEFINED ENV{VCToolsRedistDir})
-    list(APPEND _dirs
-      "$ENV{VCToolsRedistDir}/asan"
-      "$ENV{VCToolsRedistDir}/AddressSanitizer/x64")
-  endif()
-  if(DEFINED ENV{VSINSTALLDIR} AND DEFINED ENV{VCToolsVersion})
-    list(APPEND _dirs
-      "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/$ENV{VCToolsVersion}/asan"
-      "$ENV{VSINSTALLDIR}/VC/Redist/MSVC/$ENV{VCToolsVersion}/AddressSanitizer/x64")
-  endif()
-  string(JOIN ";" _joined ${_dirs})
-  set(${outvar} "${_joined}" PARENT_SCOPE)
-endfunction()
-
 # GoogleTest discovery with ASan PATH on MSVC runners
 if (BUILD_TESTING)
   include(GoogleTest)
