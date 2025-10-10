@@ -28,6 +28,7 @@ void Results::combine(const Results& other) {
   pop_overflows += other.pop_overflows;
 }
 
+// Compute latencies from histogram.
 void Results::set_latencies(LatencyStats& latencies, const std::vector<uint64_t>& histogram) {
   const auto total = std::accumulate(histogram.begin(), histogram.end(), uint64_t{0});
   if (total == 0) {
@@ -268,7 +269,7 @@ void Results::write_csv_row(std::ostream& os) const {
   os << escape_csv(serialize_hist(push_histogram)) << ',';
   os << escape_csv(serialize_hist(pop_histogram)) << ',';
 
-  // notes
+  // notes (user-supplied)
   os << escape_csv(config.notes) << '\n';
 }
 

@@ -197,7 +197,7 @@ private:
     std::vector<Results> producer_results(config_.num_producers, results);
     std::vector<Results> consumer_results(config_.num_consumers, results);
 
-    // measure nanoseconds per cycle
+    // Calibrate ns_per_cycle by comparing wall time vs rdtsc/rdtscp over ~100 ms.
     double ns_per_cycle;
     {
       const auto t0 = std::chrono::steady_clock::now();
@@ -252,7 +252,7 @@ private:
   void producer(std::size_t id, MpmcRing<T, Padding>& ring, Results& results,
                 const std::atomic<bool>& collecting, const std::atomic<bool>& done,
                 const double ns_per_cycle) const {
-    // pin to CPU core
+    // pin to even CPU core (mod num cores)
     if (config_.pinning_on) {
       unsigned num_cores = std::thread::hardware_concurrency();
       int core_id = static_cast<int>((2 * id) % num_cores);
@@ -306,15 +306,15 @@ private:
         ++i;
         results.push_latencies.min = std::min(results.push_latencies.min, latency);
         results.push_latencies.max = std::max(results.push_latencies.max, latency);
-        if ((i % SAMPLE_RATE) == 0) {
+        if ((i % SAMPLE_RATE) == 0) { // record 1 in SAMPLE_RATE latencies
           const auto histogram_idx =
               static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count());
           if (histogram_idx < config_.histogram_max_buckets) {
-            results.push_histogram[histogram_idx] += SAMPLE_RATE;
+            results.push_histogram[histogram_idx] += SAMPLE_RATE; // adjust for sample freq.
           } else {
             results.push_overflows += SAMPLE_RATE;
             results.push_latencies.spikes_over_10x_p50 +=
-                SAMPLE_RATE; // overflows assumed to be spikes
+                SAMPLE_RATE; // overflows assumed to be spikes, adjust for sample freq.
           }
         }
         ++results.pushes_ok;
@@ -330,7 +330,7 @@ private:
   void consumer(std::size_t id, MpmcRing<T, Padding>& ring, Results& results,
                 const std::atomic<bool>& collecting, const std::atomic<bool>& done,
                 const double ns_per_cycle) const {
-    // pin to CPU core
+    // pin to odd CPU core (mod num cores)
     if (config_.pinning_on) {
       unsigned num_cores = std::thread::hardware_concurrency();
       int core_id = static_cast<int>((2 * id + 1) % num_cores);
@@ -365,15 +365,15 @@ private:
         ++i;
         results.pop_latencies.min = std::min(results.pop_latencies.min, latency);
         results.pop_latencies.max = std::max(results.pop_latencies.max, latency);
-        if ((i % SAMPLE_RATE) == 0) {
+        if ((i % SAMPLE_RATE) == 0) { // record 1 in SAMPLE_RATE latencies
           const auto histogram_idx =
               static_cast<std::size_t>(latency.count() / config_.histogram_bucket_width.count());
           if (histogram_idx < config_.histogram_max_buckets) {
-            results.pop_histogram[histogram_idx] += SAMPLE_RATE;
+            results.pop_histogram[histogram_idx] += SAMPLE_RATE; // adjust for sample freq.
           } else {
             results.pop_overflows += SAMPLE_RATE;
             results.pop_latencies.spikes_over_10x_p50 +=
-                SAMPLE_RATE; // overflows assumed to be spikes
+                SAMPLE_RATE; // overflows assumed to be spikes, adjust for sample freq.
           }
         }
         ++results.pops_ok;

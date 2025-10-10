@@ -100,7 +100,7 @@ public:
   }
 
   /// Non-blocking push by copy.
-  /// @return true on success; false if the ring is full.
+  /// @return true on success, false if full or contended.
   [[nodiscard]] bool try_push(const T& v) noexcept(std::is_nothrow_copy_constructible_v<T>) {
     while (true) {
       auto ticket = head_.load(std::memory_order_relaxed);
@@ -138,7 +138,7 @@ public:
   }
 
   /// Non-blocking push by move.
-  /// @return true on success; false if the ring is full.
+  /// @return true on success, false if full or contended.
   [[nodiscard]] bool try_push(T&& v) noexcept(std::is_nothrow_move_constructible_v<T>) {
     while (true) {
       auto ticket = head_.load(std::memory_order_relaxed);
@@ -177,7 +177,7 @@ public:
   }
 
   /// Non-blocking pop into 'out'.
-  /// @return true on success; false if the ring is empty.
+  /// @return true on success, false if full or contended.
   [[nodiscard]] bool try_pop(T& out) noexcept(std::is_nothrow_move_assignable_v<T>) {
     while (true) {
       auto ticket = tail_.load(std::memory_order_relaxed);
@@ -230,8 +230,9 @@ public:
   [[nodiscard]] bool full() const noexcept { return size() == capacity(); }
 
 private:
+  // Each ring slot holds one element and a ticket code that tracks state.
   struct Slot {
-    std::atomic<std::uint64_t> code_;
+    std::atomic<std::uint64_t> code_; // i = free, i+1 = full, i+capacity = recycled
     std::aligned_storage_t<sizeof(T), alignof(T)> storage_;
   };
 
