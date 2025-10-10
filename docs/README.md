@@ -71,10 +71,10 @@ See `--help` for all options and defaults.
 producers=consumers=4, capacity=65,536, mode=blocking, warmup=2,500 ms, duration=17,500 ms, 
 bucket_width=5 ns, buckets=4,096, padding=on, pinning=on, large_payload=off, move_only_payload=off.
 
-![Blocking vs Non-blocking Throughput (MPMC)](docs/fig/mode_comparison.png)
-![Latency vs Pinning/Padding (4p4c)](docs/fig/latency_vs_pinning_padding.png)
-![Latency vs Payload (4p4c)](docs/fig/latency_vs_payload.png)
-![Latency vs Threads](docs/fig/latency_vs_threads.png)
+![Blocking vs Non-blocking Throughput (MPMC)](fig/mode_comparison.png)
+![Latency vs Pinning/Padding (4p4c)](fig/latency_vs_pinning_padding.png)
+![Latency vs Payload (4p4c)](fig/latency_vs_payload.png)
+![Latency vs Threads](fig/latency_vs_threads.png)
 
 ### Blocking vs non-blocking:
 At 4p4c, blocking outperforms non-blocking by ~2–3× on this host, while tightening p99/p999.
