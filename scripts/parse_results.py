@@ -114,7 +114,7 @@ def capacity_effect(df):
 def mode_effect(df):
     plt.figure(figsize=(8, 6))
     plt.grid(True, axis="y", linestyle="--", alpha=0.5)
-    plt.title("Blocking vs Non-blocking MPMC")
+    plt.title("Blocking vs Non-blocking Throughput (MPMC)")
     plt.xlabel("Threads (producers = consumers)")
     plt.ylabel("Throughput (ops/s)")
 
