@@ -42,21 +42,39 @@ void Results::set_latencies(LatencyStats& latencies, const std::vector<uint64_t>
   uint64_t rank999 = (total * 999 + 999) / 1000;
 
   uint64_t cumulative = 0;
-  size_t p50_idx = 0, p95_idx = 0, p99_idx = 0, p999_idx = 0;
+  size_t p50_idx = SIZE_MAX;
+  size_t p95_idx = SIZE_MAX;
+  size_t p99_idx = SIZE_MAX;
+  size_t p999_idx = SIZE_MAX;
+
   for (size_t i = 0; i < histogram.size(); ++i) {
     cumulative += histogram[i];
-    if (p50_idx == 0 && cumulative >= rank50) {
+    if (p50_idx == SIZE_MAX && cumulative >= rank50) {
       p50_idx = i;
     }
-    if (p95_idx == 0 && cumulative >= rank95) {
+    if (p95_idx == SIZE_MAX && cumulative >= rank95) {
       p95_idx = i;
     }
-    if (p99_idx == 0 && cumulative >= rank99) {
+    if (p99_idx == SIZE_MAX && cumulative >= rank99) {
       p99_idx = i;
     }
-    if (p999_idx == 0 && cumulative >= rank999) {
+    if (p999_idx == SIZE_MAX && cumulative >= rank999) {
       p999_idx = i;
     }
+  }
+
+  // fallback to last bucket if percentile not assigned
+  if (p50_idx == SIZE_MAX) {
+    p50_idx = histogram.size() - 1;
+  }
+  if (p95_idx == SIZE_MAX) {
+    p95_idx = histogram.size() - 1;
+  }
+  if (p99_idx == SIZE_MAX) {
+    p99_idx = histogram.size() - 1;
+  }
+  if (p999_idx == SIZE_MAX) {
+    p999_idx = histogram.size() - 1;
   }
 
   latencies.p50 = (p50_idx * bucket_width) + bucket_width / 2;
@@ -173,9 +191,7 @@ void Results::write_csv_row(std::ostream& os) const {
     return ss.str();
   };
 
-  const std::string push_hist_str = serialize_hist(push_histogram);
-  const std::string pop_hist_str = serialize_hist(pop_histogram);
-
+  // push and pop failure ratios
   const auto try_push_failures_pct = (pushes_ok + try_push_failures > 0)
                                          ? (100.0 * static_cast<double>(try_push_failures)) /
                                                static_cast<double>(pushes_ok + try_push_failures)
@@ -184,6 +200,19 @@ void Results::write_csv_row(std::ostream& os) const {
                                         ? (100.0 * static_cast<double>(try_pop_failures)) /
                                               static_cast<double>(pops_ok + try_pop_failures)
                                         : 0.0;
+
+  // push and pop spike ratios
+  const uint64_t push_samples =
+      std::accumulate(push_histogram.begin(), push_histogram.end(), uint64_t{0});
+  const uint64_t pop_samples =
+      std::accumulate(pop_histogram.begin(), pop_histogram.end(), uint64_t{0});
+  const double push_spike_pct =
+      push_samples ? 100.0 * double(push_latencies.spikes_over_10x_p50) / double(push_samples)
+                   : 0.0;
+  const double pop_spike_pct =
+      pop_samples ? 100.0 * double(pop_latencies.spikes_over_10x_p50) / double(pop_samples) : 0.0;
+
+  // push and pop overflow ratios
   const auto push_overflow_pct =
       100.0 * static_cast<double>(push_overflows) / static_cast<double>(pushes_ok);
   const auto pop_overflow_pct =
@@ -220,7 +249,7 @@ void Results::write_csv_row(std::ostream& os) const {
   os << push_latencies.p999.count() << ',';
   os << push_latencies.max.count() << ',';
   os << push_latencies.mean.count() << ',';
-  os << push_latencies.spikes_over_10x_p50 << ',';
+  os << std::fixed << std::setprecision(2) << push_spike_pct << ',';
 
   // pop latency
   os << pop_latencies.min.count() << ',';
@@ -230,14 +259,14 @@ void Results::write_csv_row(std::ostream& os) const {
   os << pop_latencies.p999.count() << ',';
   os << pop_latencies.max.count() << ',';
   os << pop_latencies.mean.count() << ',';
-  os << pop_latencies.spikes_over_10x_p50 << ',';
+  os << std::fixed << std::setprecision(2) << pop_spike_pct << ',';
 
   // histograms
   os << config.histogram_bucket_width.count() << ',';
   os << std::fixed << std::setprecision(2) << push_overflow_pct << ',';
   os << std::fixed << std::setprecision(2) << pop_overflow_pct << ',';
-  os << escape_csv(push_hist_str) << ',';
-  os << escape_csv(pop_hist_str) << ',';
+  os << escape_csv(serialize_hist(push_histogram)) << ',';
+  os << escape_csv(serialize_hist(pop_histogram)) << ',';
 
   // notes
   os << escape_csv(config.notes) << '\n';
