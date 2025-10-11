@@ -26,7 +26,7 @@ Bounded multi-producer / multi-consumer ring buffer with:
 - `pop(T&)`: blocking (spins) until dequeued
 - Template: `MpmcRing<T, /*Padding=*/bool>` (cursor padding toggle). Owns bounded storage.
   
-Full signatures: see [`include/mpmc.hpp`](include/mpmc.hpp).
+Full signatures: see [`include/mpmc.hpp`](../include/mpmc.hpp).
 
 ## Build
 
