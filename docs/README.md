@@ -1,3 +1,5 @@
+# MPMC Ring
+
 [![CI](https://github.com/grudshtein/mpmc-ring/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/grudshtein/mpmc-ring/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
@@ -6,7 +8,6 @@
 ![Compilers](https://img.shields.io/badge/Compilers-MSVC%20%7C%20Clang%20%7C%20GCC-6aa84f)
 ![Sanitizers](https://img.shields.io/badge/Sanitizers-ASan%20%7C%20TSan%20%7C%20UBSan-orange)
 
-# MPMC Ring
 MPMC Ring is a high-performance, bounded multi-producer/multi-consumer ring buffer for C++20.
 It provides a work-conserving blocking (ticketed) path and a non-blocking `try_*` API,
 uses atomic operations (no mutexes), and targets low-latency inter-thread messaging.
@@ -78,7 +79,7 @@ bucket_width=5 ns, buckets=4,096, padding=on, pinning=on, large_payload=off, mov
 ![Latency Distribution (4p4c)](fig/pop_hist.png)
 
 ### Blocking vs non-blocking:
-At 4p4c, blocking outperforms non-blocking by ~2–3× on this host, while tightening p99/p999.
+At 4p4c, blocking outperforms non-blocking by ~2â€“3Ã— on this host, while tightening p99/p999.
 ### Pinning and padding:
 Materially reduce tail latency.
 ### Payload sensitivity:
@@ -89,6 +90,6 @@ As threads increase, p50, p99, and p999 grow.
 ### Throughput notes:
 - On this Windows testbed, total throughput plateaued by 4p4c despite the ticketed fast path. 
 - Explicit thread pinning (affinity APIs) did not change the result. 
-- Blocking is ~2–3× faster than non-blocking at 4p4c, and pinning/padding primarily tighten tails. 
+- Blocking is ~2â€“3Ã— faster than non-blocking at 4p4c, and pinning/padding primarily tighten tails. 
 - On a single-socket Linux host, higher scaling is expected.
 - Next steps for increased performance: sharding the queue (N sub-rings).
